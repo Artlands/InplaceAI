@@ -8,18 +8,19 @@ private final class InlineSuggestionPanel: NSPanel {
 }
 
 @MainActor
-final class InlineSuggestionWindow {
+final class InlineSuggestionWindow: NSObject {
   enum Action {
     case accept(String)
     case dismiss
   }
 
-  private let maxBubbleWidth: CGFloat = 520
+  private let minBubbleWidth: CGFloat = 420
   private var window: InlineSuggestionPanel?
   private var eventMonitors: [Any] = []
   private var lastAnchor: CGRect?
   private var lastConvertedAnchor: CGRect?
   private var lastOrigin: CGPoint?
+  private var lastSize: CGSize?
   private var dragStartWindowOrigin: CGPoint?
   private var dragStartMouseLocation: CGPoint?
   private var dragRecognizer: NSPanGestureRecognizer?
@@ -62,18 +63,36 @@ final class InlineSuggestionWindow {
     window.animationBehavior = .none
     window.ignoresMouseEvents = false
     window.hasShadow = false
+    window.styleMask.insert(.resizable)
+    window.delegate = self
     // We handle dragging manually to avoid AppKit's built-in move logic fighting our gesture and causing flicker.
     window.isMovableByWindowBackground = false
     self.window = window
 
-    let availableWidth = (window.screen ?? NSScreen.main)?.visibleFrame.width ?? maxBubbleWidth
-    let widthLimit = max(280, min(maxBubbleWidth, availableWidth - 32))
+    let availableWidth = (window.screen ?? NSScreen.main)?.visibleFrame.width ?? 800
+    let widthLimit = max(320, availableWidth - 32)
     hostingView.widthAnchor.constraint(lessThanOrEqualToConstant: widthLimit).isActive = true
     hostingView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
     attachDragRecognizer(to: hostingView, window: window)
     hostingView.layoutSubtreeIfNeeded()
-    window.setContentSize(hostingView.fittingSize)
+
+    let fittingSize = hostingView.fittingSize
+    let targetSize: CGSize
+    if let lastSize {
+      targetSize = CGSize(
+        width: max(minBubbleWidth, min(lastSize.width, widthLimit)),
+        height: max(fittingSize.height, lastSize.height)
+      )
+    } else {
+      targetSize = fittingSize
+    }
+
+    window.minSize = CGSize(
+      width: max(minBubbleWidth, fittingSize.width * 0.75),
+      height: max(180, fittingSize.height * 0.8)
+    )
+    window.setContentSize(targetSize)
     positionWindow(window, anchor: anchor)
     NSApp.activate(ignoringOtherApps: true)
     window.makeKeyAndOrderFront(nil)
@@ -244,5 +263,12 @@ final class InlineSuggestionWindow {
     default:
       break
     }
+  }
+}
+
+extension InlineSuggestionWindow: NSWindowDelegate {
+  func windowDidResize(_ notification: Notification) {
+    guard let window = notification.object as? NSWindow else { return }
+    lastSize = window.frame.size
   }
 }

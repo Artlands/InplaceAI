@@ -6,7 +6,6 @@ struct SuggestionBubbleView: View {
   let acceptAction: (String) -> Void
   let dismissAction: () -> Void
   private let minBubbleWidth: CGFloat = 420
-  private let maxBubbleWidth: CGFloat = 520
   private let maxContentHeight: CGFloat = 260
   @State private var editedText: String
   @FocusState private var isEditorFocused: Bool
@@ -64,7 +63,7 @@ struct SuggestionBubbleView: View {
       .padding(.top, 6)
     }
     .padding(16)
-    .frame(minWidth: minBubbleWidth, maxWidth: maxBubbleWidth, alignment: .leading)
+    .frame(minWidth: minBubbleWidth, maxWidth: .infinity, alignment: .leading)
     .background(
       RoundedRectangle(cornerRadius: 14, style: .continuous)
         .fill(Color(NSColor.windowBackgroundColor))
