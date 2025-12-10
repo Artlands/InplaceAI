@@ -45,6 +45,9 @@ Use a currently supported OpenAI chat model (default: `gpt-5-nano`); suggested o
 - Accessibility APIs require a signed release/`codesign --deep -s -` build when distributing to other machines.
 - When testing text replacement, verify both AX replacement and the clipboard fallback (e.g., in apps that block AX writes such as some browsers).
 
+## Branding
+- A simple icon lives at `Assets/InplaceAIIcon.svg` (navy base with teal rewrite mark). Resize or export to `.icns`/`.png` as needed for macOS app and status bar assets.
+
 ## Roadmap
 - Streamed suggestions for faster feedback.
 - AppleScript/Shortcuts intents to expose rewrite actions to automation.

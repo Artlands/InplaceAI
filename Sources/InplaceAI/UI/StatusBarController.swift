@@ -17,11 +17,9 @@ final class StatusBarController {
 
     private func configureStatusItem() {
         guard let button = statusItem.button else { return }
-        button.image = NSImage(
-            systemSymbolName: "text.badge.star",
-            accessibilityDescription: "InplaceAI"
-        )
+        button.image = loadStatusIcon()
         button.imagePosition = .imageOnly
+        button.imageScaling = .scaleProportionallyUpOrDown
 
         let menu = NSMenu()
         menu.addItem(
@@ -46,6 +44,21 @@ final class StatusBarController {
             keyEquivalent: "q"
         ).target = self
         statusItem.menu = menu
+    }
+
+    private func loadStatusIcon() -> NSImage? {
+        if let url = Bundle.module.url(forResource: "InplaceAIIcon", withExtension: "pdf"),
+           let image = NSImage(contentsOf: url) {
+            // Use template so macOS tints it white/black for the menu bar
+            image.isTemplate = true
+            image.size = NSSize(width: 18, height: 18)
+            return image
+        }
+
+        return NSImage(
+            systemSymbolName: "text.badge.star",
+            accessibilityDescription: "InplaceAI"
+        )
     }
 
     private func observeState() {

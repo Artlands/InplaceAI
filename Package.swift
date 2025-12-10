@@ -17,7 +17,10 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "InplaceAI",
-            path: "Sources/InplaceAI"
+            path: "Sources/InplaceAI",
+            resources: [
+                .process("Resources")
+            ]
         )
     ]
 )
