@@ -6,6 +6,8 @@ import SwiftUI
 @MainActor
 final class AppState: ObservableObject {
   @Published var apiKey: String
+  @Published var provider: ModelProvider
+  @Published var baseURL: String
   @Published var model: String
   @Published var instruction: String
   @Published var isProcessing = false
@@ -22,9 +24,25 @@ final class AppState: ObservableObject {
 
   init() {
     let settings = settingsStore.load()
+    provider = settings.provider
+    baseURL = settings.baseURL
     model = settings.model
     instruction = settings.instruction
     apiKey = settings.apiKey
+
+    $provider
+      .dropFirst()
+      .sink { [weak self] in
+        self?.settingsStore.save(provider: $0)
+        // Update base URL to provider default if unchanged from previous default.
+        self?.maybeResetBaseURL(for: $0)
+      }
+      .store(in: &cancellables)
+
+    $baseURL
+      .dropFirst()
+      .sink { [weak self] in self?.settingsStore.save(baseURL: $0) }
+      .store(in: &cancellables)
 
     $model
       .dropFirst()
@@ -38,7 +56,7 @@ final class AppState: ObservableObject {
   }
 
   func triggerRewrite() {
-    guard !apiKey.isEmpty else {
+    guard !requiresAPIKey || !apiKey.isEmpty else {
       alert = .missingAPIKey
       return
     }
@@ -62,6 +80,15 @@ final class AppState: ObservableObject {
   func updateAPIKey(_ key: String) {
     apiKey = key
     storeAPIKey(key)
+  }
+
+  private func maybeResetBaseURL(for provider: ModelProvider) {
+    // If user hasn't customized baseURL away from the previous provider default, update it to the new default.
+    let defaults = provider.defaultBaseURL
+    let trimmed = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed.isEmpty || trimmed == ModelProvider.openAI.defaultBaseURL || trimmed == ModelProvider.custom.defaultBaseURL || trimmed == ModelProvider.local.defaultBaseURL {
+      baseURL = defaults
+    }
   }
 
   private func runRewrite() async {
@@ -94,7 +121,8 @@ final class AppState: ObservableObject {
         text: selection.text,
         instruction: instruction,
         apiKey: apiKey,
-        model: model
+        model: model,
+        baseURL: baseURL
       )
 
       self.suggestion = suggestion
@@ -174,5 +202,9 @@ final class AppState: ObservableObject {
 
   private func storeAPIKey(_ key: String) {
     settingsStore.save(apiKey: key)
+  }
+
+  private var requiresAPIKey: Bool {
+    provider == .openAI
   }
 }

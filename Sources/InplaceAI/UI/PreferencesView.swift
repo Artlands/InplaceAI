@@ -55,9 +55,56 @@ struct PreferencesView: View {
         )
     ]
 
+    private var baseURLHelpText: String {
+        switch appState.provider {
+        case .openAI:
+            return "Uses https://api.openai.com/v1. Switch provider to customize."
+        case .custom:
+            return "OpenAI-compatible endpoint (e.g., https://api.yourproxy.com/v1)."
+        case .local:
+            return "Local runner (e.g., Ollama/LM Studio) default: http://localhost:11434/v1."
+        }
+    }
+
+    private var apiKeyHelpText: String {
+        switch appState.provider {
+        case .openAI:
+            return "Required. Get one from platform.openai.com."
+        case .custom:
+            return "Optional, depending on your endpoint. Bearer token is sent if provided."
+        case .local:
+            return "Not required for local runners."
+        }
+    }
+
     var body: some View {
         Form {
-            Section("OpenAI") {
+            Section("Provider & Model") {
+                Picker("Provider", selection: $appState.provider) {
+                    ForEach(ModelProvider.allCases) { provider in
+                        Text(provider.displayName).tag(provider)
+                    }
+                }
+                TextField("Base URL", text: $appState.baseURL)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(.body, design: .monospaced))
+                    .disableAutocorrection(true)
+                    .disabled(appState.provider == .openAI)
+                Text(baseURLHelpText)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                Picker("Model", selection: $appState.model) {
+                    ForEach(suggestedModels, id: \.self) { model in
+                        Text(model).tag(model)
+                    }
+                }
+                .pickerStyle(.segmented)
+                TextField("Custom model", text: $appState.model)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            Section("API Key") {
                 Toggle("Show API Key", isOn: $showAPI.animation())
                 if showAPI {
                     TextField("sk-...", text: $apiKeyDraft)
@@ -79,15 +126,9 @@ struct PreferencesView: View {
                             .foregroundColor(.secondary)
                     }
                 }
-                Picker("Model", selection: $appState.model) {
-                    ForEach(suggestedModels, id: \.self) { model in
-                        Text(model).tag(model)
-                    }
-                }
-                .pickerStyle(.segmented)
-                TextField("Custom model", text: $appState.model)
-                    .textFieldStyle(.roundedBorder)
-                Link("Manage API keys", destination: URL(string: "https://platform.openai.com/account/api-keys")!)
+                Text(apiKeyHelpText)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
 
             Section("Prompt") {

@@ -7,12 +7,13 @@ struct OpenAIService {
         self.session = session
     }
 
-    func rewrite(text: String, instruction: String, apiKey: String, model: String) async throws -> Suggestion {
+    func rewrite(text: String, instruction: String, apiKey: String, model: String, baseURL: String) async throws -> Suggestion {
         let request = try makeRequest(
             text: text,
             instruction: instruction,
             apiKey: apiKey,
-            model: model
+            model: model,
+            baseURL: baseURL
         )
 
         let (data, response) = try await session.data(for: request)
@@ -44,12 +45,25 @@ struct OpenAIService {
         text: String,
         instruction: String,
         apiKey: String,
-        model: String
+        model: String,
+        baseURL: String
     ) throws -> URLRequest {
-        let url = URL(string: "https://api.openai.com/v1/chat/completions")!
+        var trimmed = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.hasSuffix("/") {
+            trimmed.append("/")
+        }
+        guard let root = URL(string: trimmed) else {
+            throw NSError(domain: "config", code: -3, userInfo: [NSLocalizedDescriptionKey: "Invalid base URL"])
+        }
+        let url = root.appendingPathComponent("chat/completions")
+        guard url.scheme != nil else {
+            throw NSError(domain: "config", code: -3, userInfo: [NSLocalizedDescriptionKey: "Invalid base URL"])
+        }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        if !apiKey.isEmpty {
+            request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
 
         let payload = OpenAIRequest(

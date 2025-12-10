@@ -25,6 +25,10 @@ swift run
 The first launch prompts for Accessibility permission. Add your API key and model under **Preferences** (Status bar ▸ Preferences…). The default prompt rewrites text with better grammar while preserving intent—tweak it to match your tone.
 Use a currently supported OpenAI chat model (default: `gpt-5-nano`); suggested options include `gpt-5-mini`, `gpt-5.1`, `gpt-4.1-mini`, and `gpt-4.1`, or any other available chat/completions model.
 
+### Local/custom endpoints
+- In Preferences, set Provider to **Custom** (OpenAI-compatible URL) or **Local (Ollama/LM Studio)**; update base URL/model as needed.
+- API key is only required for the OpenAI provider; for local/custom, leave it blank if your endpoint doesn’t need one.
+
 ## Usage
 1. Select text in any macOS app.
 2. Press `⌥⇧R` (or choose **Rewrite Selection** from the menu bar icon).

@@ -20,7 +20,7 @@ enum AppAlert: Identifiable {
     var message: String {
         switch self {
         case .missingAPIKey:
-            return "Add an OpenAI API key in Preferences before requesting rewrites."
+            return "Add an API key in Preferences or switch to Local/Custom mode that doesn't require one."
         case .accessibilityDenied:
             return "Grant Accessibility access in System Settings ▸ Privacy & Security ▸ Accessibility."
         case .emptySelection:
