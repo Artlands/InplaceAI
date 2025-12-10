@@ -126,7 +126,8 @@ final class AppState: ObservableObject {
       try selectionMonitor.replaceSelection(
         with: suggestion.rewrittenText,
         element: lastSelection?.element,
-        selectedRange: lastSelection?.selectedRange
+        selectedRange: lastSelection?.selectedRange,
+        originalText: lastSelection?.text
       )
     } catch {
       pasteBoardFallback(with: suggestion.rewrittenText)

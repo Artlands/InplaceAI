@@ -26,7 +26,7 @@ final class SelectionMonitor {
       throw SelectionError.emptySelection
     }
 
-    let frame = frameForElement(element)
+    let frame = selection.range.flatMap { boundsForRange($0, in: element) } ?? frameForElement(element)
     return TextSelection(
       text: selection.text,
       frame: frame,
@@ -38,7 +38,8 @@ final class SelectionMonitor {
   func replaceSelection(
     with text: String,
     element providedElement: AXUIElement? = nil,
-    selectedRange providedRange: CFRange? = nil
+    selectedRange providedRange: CFRange? = nil,
+    originalText: String? = nil
   ) throws {
     guard AccessibilityAuthorizer.isTrusted else {
       throw SelectionError.accessibilityDenied
@@ -51,11 +52,20 @@ final class SelectionMonitor {
       element = try focusedElement()
     }
 
+    let initialValue = elementStringValue(element)
+    let effectiveRange = providedRange ?? selectedTextRange(for: element)
+    let expectedValue = expectedElementValue(
+      currentValue: initialValue,
+      range: effectiveRange,
+      replacement: text,
+      originalText: originalText
+    )
+
     // Ensure the same selection is focused before attempting replacement.
     ensureSelectionActive(for: element, range: providedRange, selectAllFallback: false)
 
     if setSelectedTextAttribute(on: element, text: text),
-      (try? selectedTextAndRange(for: element)?.text == text) == true
+      replacementSucceeded(on: element, expectedValue: expectedValue, replacement: text)
     {
       return
     }
@@ -63,9 +73,17 @@ final class SelectionMonitor {
     if try replaceUsingSelectedRange(
       on: element,
       replacement: text,
-      providedRange: providedRange
+      providedRange: effectiveRange
     ),
-      (try? selectedTextAndRange(for: element)?.text == text) == true
+      replacementSucceeded(on: element, expectedValue: expectedValue, replacement: text)
+    {
+      return
+    }
+
+    if let expectedValue,
+      AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, expectedValue as CFTypeRef)
+        == .success,
+      replacementSucceeded(on: element, expectedValue: expectedValue, replacement: text)
     {
       return
     }
@@ -156,6 +174,31 @@ final class SelectionMonitor {
     return CGRect(origin: origin, size: size)
   }
 
+  private func boundsForRange(_ range: CFRange, in element: AXUIElement) -> CGRect? {
+    var mutableRange = range
+    guard let rangeValue = AXValueCreate(.cfRange, &mutableRange) else { return nil }
+
+    var value: AnyObject?
+    let result = AXUIElementCopyParameterizedAttributeValue(
+      element,
+      kAXBoundsForRangeParameterizedAttribute as CFString,
+      rangeValue,
+      &value
+    )
+
+    guard result == .success,
+      let rectValue = value,
+      CFGetTypeID(rectValue) == AXValueGetTypeID(),
+      AXValueGetType(rectValue as! AXValue) == .cgRect
+    else {
+      return nil
+    }
+
+    var rect = CGRect.zero
+    AXValueGetValue(rectValue as! AXValue, .cgRect, &rect)
+    return rect
+  }
+
   @discardableResult
   func ensureSelectionActive(
     for element: AXUIElement?,
@@ -231,6 +274,27 @@ final class SelectionMonitor {
     return error == .success
   }
 
+  private func replacementSucceeded(
+    on element: AXUIElement,
+    expectedValue: String?,
+    replacement: String
+  ) -> Bool {
+    if let expectedValue,
+      let currentValue = elementStringValue(element),
+      currentValue == expectedValue
+    {
+      return true
+    }
+
+    if let selection = try? selectedTextAndRange(for: element),
+      selection.text == replacement
+    {
+      return true
+    }
+
+    return false
+  }
+
   private func replaceUsingSelectedRange(
     on element: AXUIElement,
     replacement: String,
@@ -260,6 +324,39 @@ final class SelectionMonitor {
     )
 
     return error == .success
+  }
+
+  private func expectedElementValue(
+    currentValue: String?,
+    range: CFRange?,
+    replacement: String,
+    originalText: String?
+  ) -> String? {
+    guard let currentValue else { return nil }
+
+    if let range,
+      let swiftRange = Range(NSRange(location: range.location, length: range.length), in: currentValue)
+    {
+      var updated = currentValue
+      updated.replaceSubrange(swiftRange, with: replacement)
+      return updated
+    }
+
+    guard let originalText, originalText.isEmpty == false else {
+      return nil
+    }
+
+    guard let firstMatch = currentValue.range(of: originalText) else {
+      return nil
+    }
+    let lastMatch = currentValue.range(of: originalText, options: .backwards)
+    guard firstMatch == lastMatch else {
+      return nil  // Avoid ambiguous replacements when the text repeats.
+    }
+
+    var updated = currentValue
+    updated.replaceSubrange(firstMatch, with: replacement)
+    return updated
   }
 
 

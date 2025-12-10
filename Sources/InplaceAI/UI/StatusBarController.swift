@@ -32,11 +32,6 @@ final class StatusBarController {
             action: #selector(openPreferences),
             keyEquivalent: ","
         ).target = self
-        menu.addItem(
-            withTitle: "Request Accessibility Access",
-            action: #selector(requestAccessibility),
-            keyEquivalent: ""
-        ).target = self
         menu.addItem(.separator())
         menu.addItem(
             withTitle: "Quit InplaceAI",
@@ -88,13 +83,6 @@ final class StatusBarController {
     @objc
     private func openPreferences() {
         preferencesController?.show()
-    }
-
-    @objc
-    private func requestAccessibility() {
-        AccessibilityAuthorizer().ensureTrusted(prompt: true)
-        SystemSettingsNavigator.openAccessibilityPane()
-        appState.refreshAccessibilityStatus()
     }
 
     @objc

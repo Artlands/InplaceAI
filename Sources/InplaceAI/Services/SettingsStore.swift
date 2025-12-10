@@ -18,9 +18,7 @@ struct SettingsStore {
     func load() -> AppSettings {
         let model = defaults.string(forKey: Keys.model) ?? "gpt-5-nano"
         let instruction = defaults.string(forKey: Keys.instruction) ??
-        """
-        Rewrite the text with clearer grammar and tone while preserving the author's intent. Return only the revised text.
-        """
+        "Rewrite the text with clearer grammar and tone while preserving the author's intent. Return only the revised text."
         let apiKey = defaults.string(forKey: Keys.apiKey) ?? ""
         return AppSettings(model: model, instruction: instruction, apiKey: apiKey)
     }

@@ -5,6 +5,8 @@ struct SuggestionBubbleView: View {
   let isProcessing: Bool
   let acceptAction: () -> Void
   let dismissAction: () -> Void
+  let onDragChanged: ((CGSize) -> Void)?
+  let onDragEnded: ((CGSize) -> Void)?
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
@@ -55,6 +57,11 @@ struct SuggestionBubbleView: View {
     .overlay(
       RoundedRectangle(cornerRadius: 14, style: .continuous)
         .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+    )
+    .gesture(
+      DragGesture()
+        .onChanged { value in onDragChanged?(value.translation) }
+        .onEnded { value in onDragEnded?(value.translation) }
     )
   }
 }
