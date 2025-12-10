@@ -13,7 +13,10 @@ final class InlineSuggestionWindow {
   private var lastAnchor: CGRect?
   private var lastConvertedAnchor: CGRect?
   private var lastOrigin: CGPoint?
-  private var dragOrigin: CGPoint?
+  private var dragStartWindowOrigin: CGPoint?
+  private var dragStartMouseLocation: CGPoint?
+  private var dragRecognizer: NSPanGestureRecognizer?
+  private var isDragging = false
   private var actionHandler: ((Action) -> Void)?
 
   func present(
@@ -28,13 +31,7 @@ final class InlineSuggestionWindow {
       suggestion: suggestion,
       isProcessing: isProcessing,
       acceptAction: { [weak self] in self?.handle(action: .accept) },
-      dismissAction: { [weak self] in self?.handle(action: .dismiss) },
-      onDragChanged: { [weak self] translation in
-        self?.handleDrag(translation: translation, ended: false)
-      },
-      onDragEnded: { [weak self] translation in
-        self?.handleDrag(translation: translation, ended: true)
-      }
+      dismissAction: { [weak self] in self?.handle(action: .dismiss) }
     )
 
     let hostingView = NSHostingView(rootView: contentView)
@@ -55,11 +52,14 @@ final class InlineSuggestionWindow {
     window.isOpaque = false
     window.level = .statusBar
     window.collectionBehavior = [.canJoinAllSpaces, .transient]
+    window.animationBehavior = .none
     window.ignoresMouseEvents = false
     window.hasShadow = false
-    window.isMovableByWindowBackground = true
+    // We handle dragging manually to avoid AppKit's built-in move logic fighting our gesture and causing flicker.
+    window.isMovableByWindowBackground = false
     self.window = window
 
+    attachDragRecognizer(to: hostingView, window: window)
     hostingView.layoutSubtreeIfNeeded()
     window.setContentSize(hostingView.fittingSize)
     positionWindow(window, anchor: anchor)
@@ -84,6 +84,7 @@ final class InlineSuggestionWindow {
 
   private func positionWindow(_ window: NSWindow, anchor: CGRect?) {
     let anchorRect = anchor ?? lastAnchor
+    if isDragging { return }
     let screen = anchorRect.flatMap(screenForAXRect) ?? window.screen ?? NSScreen.main
     let convertedAnchor = anchorRect.map { convertAXRectToCocoa($0, on: screen) } ?? lastConvertedAnchor
     let target = convertedAnchor.map { CGPoint(x: $0.midX, y: $0.maxY) } ?? NSEvent.mouseLocation
@@ -107,7 +108,8 @@ final class InlineSuggestionWindow {
     lastAnchor = anchorRect ?? lastAnchor
     lastConvertedAnchor = convertedAnchor ?? lastConvertedAnchor
     lastOrigin = origin
-    dragOrigin = nil
+    dragStartMouseLocation = nil
+    dragStartWindowOrigin = nil
   }
 
   private func startMonitoringEvents() {
@@ -115,7 +117,7 @@ final class InlineSuggestionWindow {
     if let mouseMonitor = NSEvent.addGlobalMonitorForEvents(
       matching: [.leftMouseDown, .rightMouseDown],
       handler: { [weak self] event in
-        guard let self, let window else { return }
+        guard let self, let window, !isDragging else { return }
         // Only dismiss when clicking outside the bubble.
         if window.frame.contains(event.locationInWindow) { return }
         dismiss(notify: true)
@@ -144,24 +146,6 @@ final class InlineSuggestionWindow {
       NSEvent.removeMonitor(monitor)
     }
     eventMonitors.removeAll()
-  }
-
-  private func handleDrag(translation: CGSize, ended: Bool) {
-    guard let window else { return }
-    let startOrigin = dragOrigin ?? window.frame.origin
-    let newOrigin = CGPoint(
-      x: startOrigin.x + translation.width,
-      y: startOrigin.y - translation.height  // Cocoa's Y axis is flipped from SwiftUI's drag.
-    )
-    let clamped = clampedOrigin(newOrigin, windowSize: window.frame.size, target: nil, screen: window.screen)
-    window.setFrame(CGRect(origin: clamped, size: window.frame.size), display: true)
-
-    if ended {
-      lastOrigin = clamped
-      dragOrigin = nil
-    } else {
-      dragOrigin = startOrigin
-    }
   }
 
   private func clampedOrigin(
@@ -202,5 +186,45 @@ final class InlineSuggestionWindow {
     guard let screen else { return rect }
     let flippedY = screen.frame.origin.y + screen.frame.height - rect.origin.y - rect.height
     return CGRect(x: rect.origin.x, y: flippedY, width: rect.width, height: rect.height)
+  }
+
+  private func attachDragRecognizer(to view: NSView, window: NSWindow) {
+    if let existing = dragRecognizer {
+      existing.view?.removeGestureRecognizer(existing)
+    }
+
+    let recognizer = NSPanGestureRecognizer(target: self, action: #selector(handleDragGesture(_:)))
+    recognizer.delaysPrimaryMouseButtonEvents = false
+    view.addGestureRecognizer(recognizer)
+    dragRecognizer = recognizer
+  }
+
+  @objc private func handleDragGesture(_ gesture: NSPanGestureRecognizer) {
+    guard let window else { return }
+
+    switch gesture.state {
+    case .began:
+      isDragging = true
+      dragStartWindowOrigin = window.frame.origin
+      dragStartMouseLocation = NSEvent.mouseLocation
+    case .changed:
+      guard
+        let startOrigin = dragStartWindowOrigin,
+        let startMouse = dragStartMouseLocation
+      else { return }
+
+      let current = NSEvent.mouseLocation
+      let delta = CGSize(width: current.x - startMouse.x, height: current.y - startMouse.y)
+      let newOrigin = CGPoint(x: startOrigin.x + delta.width, y: startOrigin.y + delta.height)
+      let clamped = clampedOrigin(newOrigin, windowSize: window.frame.size, target: nil, screen: window.screen)
+      window.setFrameOrigin(clamped)
+    case .ended, .cancelled, .failed:
+      lastOrigin = window.frame.origin
+      dragStartMouseLocation = nil
+      dragStartWindowOrigin = nil
+      isDragging = false
+    default:
+      break
+    }
   }
 }
