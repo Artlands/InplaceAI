@@ -8,6 +8,7 @@ final class InlineSuggestionWindow {
     case dismiss
   }
 
+  private let maxBubbleWidth: CGFloat = 520
   private var window: NSWindow?
   private var eventMonitors: [Any] = []
   private var lastAnchor: CGRect?
@@ -59,6 +60,11 @@ final class InlineSuggestionWindow {
     window.isMovableByWindowBackground = false
     self.window = window
 
+    let availableWidth = (window.screen ?? NSScreen.main)?.visibleFrame.width ?? maxBubbleWidth
+    let widthLimit = max(280, min(maxBubbleWidth, availableWidth - 32))
+    hostingView.widthAnchor.constraint(lessThanOrEqualToConstant: widthLimit).isActive = true
+    hostingView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
     attachDragRecognizer(to: hostingView, window: window)
     hostingView.layoutSubtreeIfNeeded()
     window.setContentSize(hostingView.fittingSize)
@@ -79,6 +85,10 @@ final class InlineSuggestionWindow {
   }
 
   private func handle(action: Action) {
+    if action == .dismiss {
+      dismiss(notify: true)
+      return
+    }
     actionHandler?(action)
   }
 

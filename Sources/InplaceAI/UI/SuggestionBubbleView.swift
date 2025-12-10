@@ -5,6 +5,8 @@ struct SuggestionBubbleView: View {
   let isProcessing: Bool
   let acceptAction: () -> Void
   let dismissAction: () -> Void
+  private let maxBubbleWidth: CGFloat = 520
+  private let maxContentHeight: CGFloat = 260
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
@@ -18,25 +20,46 @@ struct SuggestionBubbleView: View {
       }
 
       VStack(alignment: .leading, spacing: 4) {
-        Text("Original")
-          .font(.caption)
-          .foregroundColor(.secondary)
-        Text(suggestion.originalText)
-          .font(.callout)
-          .lineLimit(3)
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+          Text("Prompt Setting: ")
+            .font(.caption)
+            .foregroundColor(.secondary)
+          Text(suggestion.promptTitle)
+            .font(.subheadline.weight(.semibold))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
       }
       .padding(8)
-      .background(.quaternary.opacity(0.3))
+      .background(.quaternary.opacity(0.2))
       .cornerRadius(6)
 
-      VStack(alignment: .leading, spacing: 4) {
-        Text("Rewritten")
-          .font(.caption)
-          .foregroundColor(.secondary)
-        Text(suggestion.rewrittenText)
-          .font(.body)
-          .fixedSize(horizontal: false, vertical: true)
+      ScrollView {
+        VStack(alignment: .leading, spacing: 8) {
+          VStack(alignment: .leading, spacing: 4) {
+            Text("Original: ")
+              .font(.caption)
+              .foregroundColor(.secondary)
+            Text(suggestion.originalText)
+              .font(.callout)
+              .multilineTextAlignment(.leading)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+          .padding(8)
+          .background(.quaternary.opacity(0.3))
+          .cornerRadius(6)
+
+          VStack(alignment: .leading, spacing: 4) {
+            Text("Rewritten: ")
+              .font(.caption)
+              .foregroundColor(.secondary)
+            Text(suggestion.rewrittenText)
+              .font(.body)
+              .multilineTextAlignment(.leading)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+        }
       }
+      .frame(maxHeight: maxContentHeight)
 
       HStack {
         Spacer()
@@ -48,6 +71,8 @@ struct SuggestionBubbleView: View {
       .padding(.top, 6)
     }
     .padding(16)
+    .frame(maxWidth: maxBubbleWidth, alignment: .leading)
+    .fixedSize(horizontal: false, vertical: true)
     .background(
       RoundedRectangle(cornerRadius: 14, style: .continuous)
         .fill(Color(NSColor.windowBackgroundColor))

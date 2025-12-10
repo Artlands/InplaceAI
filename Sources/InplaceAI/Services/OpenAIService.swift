@@ -37,7 +37,9 @@ struct OpenAIService {
         return Suggestion(
             originalText: text,
             rewrittenText: rewritten,
-            explanation: nil
+            explanation: nil,
+            instruction: instruction,
+            promptTitle: PromptLibrary.title(for: instruction)
         )
     }
 

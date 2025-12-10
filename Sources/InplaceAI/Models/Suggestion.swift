@@ -14,6 +14,8 @@ struct Suggestion: Identifiable {
     let originalText: String
     let rewrittenText: String
     let explanation: String?
+    let instruction: String
+    let promptTitle: String
 }
 
 enum SelectionError: LocalizedError {

@@ -1,33 +1,14 @@
 import SwiftUI
 
-struct PreferencesView: View {
-    @ObservedObject var appState: AppState
-    @State private var showAPI = false
-    @State private var apiKeyDraft: String
-    @State private var selectedPresetID: String
-
-    init(appState: AppState) {
-        self.appState = appState
-        _apiKeyDraft = State(initialValue: appState.apiKey)
-        _selectedPresetID = State(initialValue: PreferencesView.presetID(for: appState.instruction))
-    }
-
-    private let suggestedModels = [
-        "gpt-5-nano",
-        "gpt-5-mini",
-        "gpt-5.1",
-        "gpt-4.1-mini",
-        "gpt-4.1"
-    ]
-
-    private struct PromptPreset: Identifiable {
+struct PromptLibrary {
+    struct PromptPreset: Identifiable {
         let id: String
         let title: String
         let text: String
     }
 
-    private static let customPresetID = "custom"
-    private static let promptPresets: [PromptPreset] = [
+    static let customPresetID = "custom"
+    static let presets: [PromptPreset] = [
         .init(
             id: "default",
             title: "Clear + preserved intent",
@@ -53,6 +34,43 @@ struct PreferencesView: View {
             title: "Expand/explain",
             text: "Expand the text with more context and clarity while keeping the same intent and voice. Return only the revised text."
         )
+    ]
+
+    static func title(for instruction: String) -> String {
+        let trimmed = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let match = presets.first(where: { $0.text == trimmed }) {
+            return match.title
+        }
+        return "Custom"
+    }
+
+    static func presetID(for instruction: String) -> String {
+        let trimmed = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let match = presets.first(where: { $0.text == trimmed }) {
+            return match.id
+        }
+        return customPresetID
+    }
+}
+
+struct PreferencesView: View {
+    @ObservedObject var appState: AppState
+    @State private var showAPI = false
+    @State private var apiKeyDraft: String
+    @State private var selectedPresetID: String
+
+    init(appState: AppState) {
+        self.appState = appState
+        _apiKeyDraft = State(initialValue: appState.apiKey)
+        _selectedPresetID = State(initialValue: PromptLibrary.presetID(for: appState.instruction))
+    }
+
+    private let suggestedModels = [
+        "gpt-5-nano",
+        "gpt-5-mini",
+        "gpt-5.1",
+        "gpt-4.1-mini",
+        "gpt-4.1"
     ]
 
     private var baseURLHelpText: String {
@@ -133,10 +151,10 @@ struct PreferencesView: View {
 
             Section("Prompt") {
                 Picker("Preset", selection: $selectedPresetID) {
-                    ForEach(Self.promptPresets) { preset in
+                    ForEach(PromptLibrary.presets) { preset in
                         Text(preset.title).tag(preset.id)
                     }
-                    Text("Custom").tag(Self.customPresetID)
+                    Text("Custom").tag(PromptLibrary.customPresetID)
                 }
                 .onChange(of: selectedPresetID) { newID in
                     applyPresetIfNeeded(newID)
@@ -147,7 +165,7 @@ struct PreferencesView: View {
                     .font(.system(.body, design: .monospaced))
                     .frame(height: 120)
                     .onChange(of: appState.instruction) { newValue in
-                        selectedPresetID = PreferencesView.presetID(for: newValue)
+                        selectedPresetID = PromptLibrary.presetID(for: newValue)
                     }
                 Text("Choose a preset or customize your own rewrite instruction. The prompt is saved automatically.")
                     .font(.caption)
@@ -173,16 +191,8 @@ struct PreferencesView: View {
     }
 
     private func applyPresetIfNeeded(_ presetID: String) {
-        guard presetID != Self.customPresetID else { return }
-        guard let preset = Self.promptPresets.first(where: { $0.id == presetID }) else { return }
+        guard presetID != PromptLibrary.customPresetID else { return }
+        guard let preset = PromptLibrary.presets.first(where: { $0.id == presetID }) else { return }
         appState.instruction = preset.text
-    }
-
-    private static func presetID(for instruction: String) -> String {
-        let trimmed = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let match = promptPresets.first(where: { $0.text == trimmed }) {
-            return match.id
-        }
-        return customPresetID
     }
 }

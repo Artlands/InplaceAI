@@ -110,7 +110,9 @@ final class AppState: ObservableObject {
         suggestion: Suggestion(
           originalText: selection.text,
           rewrittenText: "Working on your rewrite...",
-          explanation: nil
+          explanation: nil,
+          instruction: instruction,
+          promptTitle: PromptLibrary.title(for: instruction)
         ),
         anchor: selection.frame,
         isProcessing: true,
