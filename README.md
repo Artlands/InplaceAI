@@ -1,6 +1,6 @@
 # InplaceAI
 
-InplaceAI is a macOS menu bar assistant that rewrites the text you have selected in any app using OpenAI. Trigger it with `⌥⇧R` (or the menu bar command) and it captures the selected text through the Accessibility API, sends it to the configured model, then shows an inline bubble with the suggested rewrite so you can accept it in-place.
+InplaceAI is a macOS menu bar assistant that rewrites the text you have selected in any app using LLM. Trigger it with `⌥⇧R` (or the menu bar command) and it captures the selected text through the Accessibility API, sends it to the configured model, then shows an inline bubble with the suggested rewrite so you can accept it in-place.
 
 ## Highlights
 - **System-wide**: works in any text field that exposes accessibility text (Mail, Notes, Outlook, etc.).
@@ -44,6 +44,19 @@ Use a currently supported OpenAI chat model (default: `gpt-5-nano`); suggested o
 - Use `swift build` / `swift run` for iterative development. If sandboxed environments block SwiftPM caches, point `SWIFTPM_CONFIGURATION_PATH` and `SWIFTPM_CACHE_PATH` to writable directories before building.
 - Accessibility APIs require a signed release/`codesign --deep -s -` build when distributing to other machines.
 - When testing text replacement, verify both AX replacement and the clipboard fallback (e.g., in apps that block AX writes such as some browsers).
+
+## Building a DMG for distribution
+Use the helper script to build, sign, (optionally) notarize, and package a DMG:
+```bash
+# From repo root
+CODESIGN_ID="Developer ID Application: Your Name (TEAMID)" \
+NOTARY_PROFILE=your-notarytool-profile \  # omit to skip notarization
+./scripts/build_dmg.sh
+```
+Notes:
+- DMG lands in `dist/InplaceAI.dmg`; app bundle is staged in `dist/InplaceAI.app`.
+- Default build is arm64 only; set `BUILD_ARCHS="--arch arm64 --arch x86_64"` for a universal build.
+- For testing without distribution, set `CODESIGN_ID="-"` to ad-hoc sign and skip `NOTARY_PROFILE`.
 
 ## Branding
 - A simple icon lives at `Assets/InplaceAIIcon.svg` (navy base with teal rewrite mark). Resize or export to `.icns`/`.png` as needed for macOS app and status bar assets.
