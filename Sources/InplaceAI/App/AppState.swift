@@ -135,8 +135,8 @@ final class AppState: ObservableObject {
       ) { [weak self] action in
         guard let self else { return }
         switch action {
-        case .accept:
-          self.applySuggestion(suggestion)
+        case .accept(let text):
+          self.applySuggestion(suggestion, overrideText: text)
         case .dismiss:
           self.suggestion = nil
         }
@@ -150,17 +150,18 @@ final class AppState: ObservableObject {
     isProcessing = false
   }
 
-  private func applySuggestion(_ suggestion: Suggestion) {
+  private func applySuggestion(_ suggestion: Suggestion, overrideText: String?) {
     suggestionWindow.dismiss()
+    let replacement = overrideText ?? suggestion.rewrittenText
     do {
       try selectionMonitor.replaceSelection(
-        with: suggestion.rewrittenText,
+        with: replacement,
         element: lastSelection?.element,
         selectedRange: lastSelection?.selectedRange,
         originalText: lastSelection?.text
       )
     } catch {
-      pasteBoardFallback(with: suggestion.rewrittenText)
+      pasteBoardFallback(with: replacement)
     }
   }
 

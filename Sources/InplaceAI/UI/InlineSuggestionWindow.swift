@@ -1,15 +1,21 @@
 import AppKit
 import SwiftUI
 
+// Borderless panel that can become key so the inline editor accepts keyboard input.
+private final class InlineSuggestionPanel: NSPanel {
+  override var canBecomeKey: Bool { true }
+  override var canBecomeMain: Bool { true }
+}
+
 @MainActor
 final class InlineSuggestionWindow {
   enum Action {
-    case accept
+    case accept(String)
     case dismiss
   }
 
   private let maxBubbleWidth: CGFloat = 520
-  private var window: NSWindow?
+  private var window: InlineSuggestionPanel?
   private var eventMonitors: [Any] = []
   private var lastAnchor: CGRect?
   private var lastConvertedAnchor: CGRect?
@@ -31,7 +37,7 @@ final class InlineSuggestionWindow {
     let contentView = SuggestionBubbleView(
       suggestion: suggestion,
       isProcessing: isProcessing,
-      acceptAction: { [weak self] in self?.handle(action: .accept) },
+      acceptAction: { [weak self] text in self?.handle(action: .accept(text)) },
       dismissAction: { [weak self] in self?.handle(action: .dismiss) }
     )
 
@@ -40,7 +46,7 @@ final class InlineSuggestionWindow {
 
     let window =
       window
-      ?? NSWindow(
+      ?? InlineSuggestionPanel(
         contentRect: CGRect(origin: .zero, size: CGSize(width: 360, height: 180)),
         styleMask: [.borderless],
         backing: .buffered,
@@ -69,6 +75,7 @@ final class InlineSuggestionWindow {
     hostingView.layoutSubtreeIfNeeded()
     window.setContentSize(hostingView.fittingSize)
     positionWindow(window, anchor: anchor)
+    NSApp.activate(ignoringOtherApps: true)
     window.makeKeyAndOrderFront(nil)
     startMonitoringEvents()
   }
@@ -85,11 +92,12 @@ final class InlineSuggestionWindow {
   }
 
   private func handle(action: Action) {
-    if action == .dismiss {
+    switch action {
+    case .dismiss:
       dismiss(notify: true)
-      return
+    case .accept:
+      actionHandler?(action)
     }
-    actionHandler?(action)
   }
 
   private func positionWindow(_ window: NSWindow, anchor: CGRect?) {

@@ -3,10 +3,13 @@ import SwiftUI
 struct SuggestionBubbleView: View {
   let suggestion: Suggestion
   let isProcessing: Bool
-  let acceptAction: () -> Void
+  let acceptAction: (String) -> Void
   let dismissAction: () -> Void
+  private let minBubbleWidth: CGFloat = 420
   private let maxBubbleWidth: CGFloat = 520
   private let maxContentHeight: CGFloat = 260
+  @State private var editedText: String
+  @FocusState private var isEditorFocused: Bool
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
@@ -33,46 +36,35 @@ struct SuggestionBubbleView: View {
       .background(.quaternary.opacity(0.2))
       .cornerRadius(6)
 
-      ScrollView {
-        VStack(alignment: .leading, spacing: 8) {
-          VStack(alignment: .leading, spacing: 4) {
-            Text("Original: ")
-              .font(.caption)
-              .foregroundColor(.secondary)
-            Text(suggestion.originalText)
-              .font(.callout)
-              .multilineTextAlignment(.leading)
-              .fixedSize(horizontal: false, vertical: true)
-          }
-          .padding(8)
-          .background(.quaternary.opacity(0.3))
-          .cornerRadius(6)
-
-          VStack(alignment: .leading, spacing: 4) {
-            Text("Rewritten: ")
-              .font(.caption)
-              .foregroundColor(.secondary)
-            Text(suggestion.rewrittenText)
-              .font(.body)
-              .multilineTextAlignment(.leading)
-              .fixedSize(horizontal: false, vertical: true)
-          }
+      VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Rewritten: ")
+            .font(.caption)
+            .foregroundColor(.secondary)
+          TextEditor(text: $editedText)
+            .font(.body)
+            .frame(minHeight: 140, maxHeight: maxContentHeight)
+            .scrollContentBackground(.hidden)
+            .padding(8)
+            .background(.quaternary.opacity(0.25))
+            .cornerRadius(8)
+            .focused($isEditorFocused)
         }
       }
-      .frame(maxHeight: maxContentHeight)
+      .frame(maxWidth: .infinity, alignment: .leading)
 
       HStack {
         Spacer()
         Button("Dismiss", action: dismissAction)
-        Button("Replace", action: acceptAction)
+        Button("Replace") { acceptAction(editedText) }
           .keyboardShortcut(.defaultAction)
           .buttonStyle(.borderedProminent)
+          .disabled(isProcessing)
       }
       .padding(.top, 6)
     }
     .padding(16)
-    .frame(maxWidth: maxBubbleWidth, alignment: .leading)
-    .fixedSize(horizontal: false, vertical: true)
+    .frame(minWidth: minBubbleWidth, maxWidth: maxBubbleWidth, alignment: .leading)
     .background(
       RoundedRectangle(cornerRadius: 14, style: .continuous)
         .fill(Color(NSColor.windowBackgroundColor))
@@ -81,5 +73,28 @@ struct SuggestionBubbleView: View {
       RoundedRectangle(cornerRadius: 14, style: .continuous)
         .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
     )
+    .onAppear {
+      editedText = suggestion.rewrittenText
+      DispatchQueue.main.async { isEditorFocused = true }
+    }
+    .onChange(of: suggestion.id) { _ in
+      editedText = suggestion.rewrittenText
+      DispatchQueue.main.async { isEditorFocused = true }
+    }
+  }
+}
+
+extension SuggestionBubbleView {
+  init(
+    suggestion: Suggestion,
+    isProcessing: Bool,
+    acceptAction: @escaping (String) -> Void,
+    dismissAction: @escaping () -> Void
+  ) {
+    self.suggestion = suggestion
+    self.isProcessing = isProcessing
+    self.acceptAction = acceptAction
+    self.dismissAction = dismissAction
+    _editedText = State(initialValue: suggestion.rewrittenText)
   }
 }
