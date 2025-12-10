@@ -7,6 +7,8 @@ final class StatusBarController {
     private var cancellables = Set<AnyCancellable>()
     private let appState: AppState
     private let preferencesController: PreferencesController?
+    private let repositoryURL = URL(string: "https://github.com/Artlands/InplaceAI")
+    private lazy var appIcon: NSImage? = loadAppIcon()
 
     init(appState: AppState, preferencesController: PreferencesController?) {
         self.appState = appState
@@ -31,6 +33,11 @@ final class StatusBarController {
             withTitle: "Preferences…",
             action: #selector(openPreferences),
             keyEquivalent: ","
+        ).target = self
+        menu.addItem(
+            withTitle: "About",
+            action: #selector(openAbout),
+            keyEquivalent: ""
         ).target = self
         menu.addItem(.separator())
         menu.addItem(
@@ -83,6 +90,36 @@ final class StatusBarController {
     @objc
     private func openPreferences() {
         preferencesController?.show()
+    }
+
+    @objc
+    private func openAbout() {
+        statusItem.menu?.cancelTracking()
+        let alert = NSAlert()
+        alert.messageText = "InplaceAI"
+        alert.informativeText = """
+        Author: Artlands
+        GitHub: https://github.com/Artlands/InplaceAI
+        """
+        alert.alertStyle = .informational
+        if let icon = appIcon ?? NSApp.applicationIconImage {
+            alert.icon = icon
+        }
+        alert.addButton(withTitle: "Open GitHub")
+        alert.addButton(withTitle: "OK")
+
+        if alert.runModal() == .alertFirstButtonReturn,
+           let url = repositoryURL {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    private func loadAppIcon() -> NSImage? {
+        if let url = Bundle.module.url(forResource: "AppIcon", withExtension: "icns"),
+           let image = NSImage(contentsOf: url) {
+            return image
+        }
+        return nil
     }
 
     @objc
