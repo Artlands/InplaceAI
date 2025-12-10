@@ -8,6 +8,7 @@ struct AccessibilityAuthorizer {
     }
 
     func ensureTrusted(prompt: Bool) {
+        guard !Self.isTrusted else { return }
         let options = [
             "AXTrustedCheckOptionPrompt": prompt as CFBoolean
         ] as CFDictionary

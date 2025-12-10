@@ -11,6 +11,7 @@ enum AppBundleInstaller {
     @discardableResult
     static func ensureRunningFromBundle() -> Bool {
         if Bundle.main.bundlePath.hasSuffix(".app") {
+            ensureIconPresent(in: URL(fileURLWithPath: Bundle.main.bundlePath))
             return true
         }
 
@@ -50,6 +51,7 @@ enum AppBundleInstaller {
 
         let infoPlistURL = contentsURL.appendingPathComponent("Info.plist", isDirectory: false)
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+        let iconName = "AppIcon"
         let infoPlist = """
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -71,6 +73,12 @@ enum AppBundleInstaller {
             <string>\(version)</string>
             <key>CFBundleVersion</key>
             <string>\(version)</string>
+            <key>CFBundleIconFile</key>
+            <string>\(iconName)</string>
+            <key>CFBundleIconFiles</key>
+            <array>
+                <string>\(iconName)</string>
+            </array>
             <key>LSUIElement</key>
             <true/>
             <key>NSPrincipalClass</key>
@@ -80,6 +88,68 @@ enum AppBundleInstaller {
         """
         try infoPlist.write(to: infoPlistURL, atomically: true, encoding: .utf8)
 
+        // Copy bundled icon so macOS shows it in System Settings.
+        if let iconSource = findAppIcon() {
+            let destination = resourcesURL.appendingPathComponent("\(iconName).icns")
+            try? manager.removeItem(at: destination)
+            try manager.copyItem(at: iconSource, to: destination)
+        }
+
         return bundleURL
+    }
+
+    private static func findAppIcon() -> URL? {
+        if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns") {
+            return url
+        }
+        #if SWIFT_PACKAGE
+        if let url = Bundle.module.url(forResource: "AppIcon", withExtension: "icns") {
+            return url
+        }
+        #endif
+        return nil
+    }
+
+    private static func ensureIconPresent(in bundleURL: URL) {
+        let manager = FileManager.default
+        let contentsURL = bundleURL.appendingPathComponent("Contents", isDirectory: true)
+        let resourcesURL = contentsURL.appendingPathComponent("Resources", isDirectory: true)
+        let infoPlistURL = contentsURL.appendingPathComponent("Info.plist", isDirectory: false)
+        let iconName = "AppIcon"
+        let iconURL = resourcesURL.appendingPathComponent("\(iconName).icns")
+
+        var plistDict: [String: Any] = [:]
+        if
+            let data = try? Data(contentsOf: infoPlistURL),
+            let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil),
+            let dict = plist as? [String: Any]
+        {
+            plistDict = dict
+        }
+
+        var changed = false
+        if (plistDict["CFBundleIconFile"] as? String)?.isEmpty ?? true {
+            plistDict["CFBundleIconFile"] = iconName
+            changed = true
+        }
+
+        if plistDict["CFBundleIconFiles"] == nil {
+            plistDict["CFBundleIconFiles"] = [iconName]
+            changed = true
+        }
+
+        if changed,
+           let data = try? PropertyListSerialization.data(fromPropertyList: plistDict, format: .xml, options: 0)
+        {
+            try? manager.createDirectory(at: contentsURL, withIntermediateDirectories: true)
+            try? data.write(to: infoPlistURL)
+        }
+
+        if !manager.fileExists(atPath: iconURL.path),
+           let iconSource = findAppIcon()
+        {
+            try? manager.createDirectory(at: resourcesURL, withIntermediateDirectories: true)
+            try? manager.copyItem(at: iconSource, to: iconURL)
+        }
     }
 }

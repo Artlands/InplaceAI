@@ -98,6 +98,7 @@ final class StatusBarController {
         let alert = NSAlert()
         alert.messageText = "InplaceAI"
         alert.informativeText = """
+        \(appVersionString())
         Author: Artlands
         GitHub: https://github.com/Artlands/InplaceAI
         """
@@ -120,6 +121,21 @@ final class StatusBarController {
             return image
         }
         return nil
+    }
+
+    private func appVersionString() -> String {
+        let bundle = Bundle.main
+        let version = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let build = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+
+        switch (version, build) {
+        case let (v?, b?) where b != v:
+            return "Version \(v) (\(b))"
+        case let (v?, _):
+            return "Version \(v)"
+        default:
+            return "Version unknown"
+        }
     }
 
     @objc

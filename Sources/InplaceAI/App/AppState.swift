@@ -21,6 +21,7 @@ final class AppState: ObservableObject {
   private let openAIService = OpenAIService()
   private let suggestionWindow = InlineSuggestionWindow()
   private var cancellables = Set<AnyCancellable>()
+  private var accessibilityPollTask: Task<Void, Never>?
 
   init() {
     let settings = settingsStore.load()
@@ -75,6 +76,15 @@ final class AppState: ObservableObject {
 
   func refreshAccessibilityStatus() {
     accessibilityTrusted = AccessibilityAuthorizer.isTrusted
+  }
+
+  func requestAccessibilityPermission() {
+    if accessibilityTrusted { return }
+    accessibilityPollTask?.cancel()
+    // Avoid the system prompt that can get stuck open; just register and open settings.
+    AccessibilityAuthorizer().ensureTrusted(prompt: false)
+    SystemSettingsNavigator.openAccessibilityPane()
+    startAccessibilityPolling()
   }
 
   func updateAPIKey(_ key: String) {
@@ -209,5 +219,24 @@ final class AppState: ObservableObject {
 
   private var requiresAPIKey: Bool {
     provider == .openAI
+  }
+
+  func startAccessibilityPolling(
+    interval: TimeInterval = 0.5,
+    timeout: TimeInterval? = nil
+  ) {
+    accessibilityPollTask?.cancel()
+    let deadline = timeout.map { Date().addingTimeInterval($0) }
+
+    accessibilityPollTask = Task { @MainActor [weak self] in
+      guard let self else { return }
+      while !Task.isCancelled {
+        let trusted = AccessibilityAuthorizer.isTrusted
+        accessibilityTrusted = trusted
+        if trusted { return }
+        if let deadline, Date() >= deadline { return }
+        try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+      }
+    }
   }
 }

@@ -176,9 +176,7 @@ struct PreferencesView: View {
                 Label(appState.accessibilityTrusted ? "Accessibility granted" : "Grant accessibility",
                       systemImage: appState.accessibilityTrusted ? "checkmark.shield" : "exclamationmark.shield")
                 Button("Request Permission") {
-                    AccessibilityAuthorizer().ensureTrusted(prompt: true)
-                    SystemSettingsNavigator.openAccessibilityPane()
-                    appState.refreshAccessibilityStatus()
+                    appState.requestAccessibilityPermission()
                 }
             }
         }

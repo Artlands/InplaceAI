@@ -27,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         accessibilityAuthorizer.ensureTrusted(prompt: false)
         appState.refreshAccessibilityStatus()
+        appState.startAccessibilityPolling(timeout: 30)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
