@@ -1,10 +1,10 @@
 # InplaceAI
 
-InplaceAI is a macOS menu bar assistant that rewrites the text you have selected in any app using LLM. Trigger it with `⌥⇧R` (or the menu bar command) and it captures the selected text through the Accessibility API, sends it to the configured model, then shows an inline bubble with the suggested rewrite so you can accept it in-place.
+InplaceAI is a macOS menu bar assistant that brings Writing Tools-style edits to selected text in any app. Trigger it with `⌥⇧R` (or the menu bar command) and it captures the selected text through the Accessibility API, opens a floating tools panel, sends the selected mode to the configured model, then lets you replace the text in-place. You can also use the macOS Services/right-click action to fix selected text directly.
 
 ## Highlights
 - **System-wide**: works in any text field that exposes accessibility text (Mail, Notes, Outlook, etc.).
-- **Inline suggestions**: a floating bubble preview shows the before/after diff and lets you replace text without switching apps.
+- **Writing Tools panel**: choose Proofread, Rewrite, tone changes, summaries, key points, lists, or your saved custom prompt without switching apps.
 - **Configurable AI**: paste your OpenAI key once (stored locally in the app’s preferences), pick a model, and fine-tune the rewrite instruction.
 - **Privacy-aware**: only the raw selection is sent to OpenAI—nothing is masked or pre-processed—so you can see exactly what leaves your machine.
 
@@ -31,21 +31,26 @@ Use a currently supported OpenAI chat model (default: `gpt-5-nano`); suggested o
 
 ## Usage
 1. Select text in any macOS app.
-2. Press `⌥⇧R` (or choose **Rewrite Selection** from the menu bar icon).
-3. Review the inline suggestion bubble:
-   - **Replace** injects the rewrite directly (falls back to clipboard + paste if direct replacement fails).
+2. Press `⌥⇧R` (or choose **Writing Tools…** from the menu bar icon).
+3. Pick a writing mode and review the floating panel:
+   - **Replace** or `⌘Return` injects the rewrite directly (falls back to clipboard + paste if direct replacement fails).
    - **Dismiss** closes the bubble without changes.
+
+### Right-click / Services
+After launching the bundled app once, macOS exposes **Fix Grammar with InplaceAI** in the Services menu for selected text. In many apps this appears under right-click ▸ **Services**; it sends the selected text to the configured model and returns the replacement directly to the source app.
 
 ## Architecture
 - **SwiftUI App + NSStatusItem** for lightweight menu bar residency (`InplaceAIApp`, `StatusBarController`).
 - **Accessibility bridge** (`SelectionMonitor`, `AccessibilityAuthorizer`) watches the focused text element and replaces text via AX APIs.
 - **AI client** (`OpenAIService`) calls `chat/completions`, parameterized by the user’s model/instruction.
 - **State & storage** (`AppState`, `SettingsStore`) handle API keys, prompt presets, and orchestrate rewrite tasks.
-- **Inline UI** (`InlineSuggestionWindow`, `SuggestionBubbleView`) renders the floating revision bubble and manages accept/dismiss actions.
+- **Inline UI** (`InlineSuggestionWindow`, `SuggestionBubbleView`) renders the floating Writing Tools panel and manages mode selection, accept, and dismiss actions.
 - **Global shortcut** (`HotkeyController`) registers the `⌥⇧R` trigger using Carbon hotkeys so the workflow stays in-app.
+- **macOS Services** (`TextServiceProvider`) exposes the right-click Services action for direct replacement.
 
 ## Testing & Debugging
 - Use `swift build` / `swift run` for iterative development. If sandboxed environments block SwiftPM caches, point `SWIFTPM_CONFIGURATION_PATH` and `SWIFTPM_CACHE_PATH` to writable directories before building.
+- If Accessibility still reports denied after you already granted it, remove the old InplaceAI entry from System Settings and add `/Users/jieli/Applications/InplaceAI.app` again. Older local builds used a less stable ad-hoc identity, so macOS may keep a stale grant.
 - Accessibility APIs require a signed release/`codesign --deep -s -` build when distributing to other machines.
 - When testing text replacement, verify both AX replacement and the clipboard fallback (e.g., in apps that block AX writes such as some browsers).
 

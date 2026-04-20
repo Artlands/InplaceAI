@@ -25,7 +25,7 @@ final class StatusBarController {
 
         let menu = NSMenu()
         menu.addItem(
-            withTitle: "Rewrite Selection (⌥⇧R)",
+            withTitle: "Writing Tools… (⌥⇧R)",
             action: #selector(rewriteSelection),
             keyEquivalent: ""
         ).target = self

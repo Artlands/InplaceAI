@@ -4,7 +4,7 @@ set -euo pipefail
 # Build a signed/notarized DMG for InplaceAI.
 # Environment variables:
 #   BUILD_ARCHS:  Space-delimited SwiftPM arch flags (default: "--arch arm64")
-#   CODESIGN_ID:  Developer ID Application cert name or "-" for ad-hoc (required for distribution)
+#   CODESIGN_ID:  Developer ID Application cert name or "-" for ad-hoc (default: "-")
 #   NOTARY_PROFILE: Keychain profile for `notarytool` (optional; skips notarization if empty)
 #   DIST_DIR:     Output directory (default: dist)
 #   DMG_NAME:     DMG filename (default: InplaceAI.dmg)
@@ -14,6 +14,7 @@ APP_NAME="InplaceAI"
 DIST_DIR="${DIST_DIR:-dist}"
 DMG_NAME="${DMG_NAME:-${APP_NAME}.dmg}"
 BUILD_ARCHS="${BUILD_ARCHS:---arch arm64}"
+CODESIGN_ID="${CODESIGN_ID:--}"
 APP_VERSION="${APP_VERSION:-1.0}"
 ICON_SRC="${ICON_SRC:-${ROOT}/Assets/InplaceAIIcon.svg}"
 ICON_DST="${ICON_DST:-${ROOT}/Sources/InplaceAI/Resources/AppIcon.icns}"
@@ -55,6 +56,29 @@ ensure_icns() {
 
     iconutil -c icns "$iconset" -o "$ICON_DST"
     rm -rf "$tmpdir"
+}
+
+ensure_services_plist() {
+    local plist="$1"
+    if [[ ! -f "$plist" ]]; then
+        return
+    fi
+
+    /usr/libexec/PlistBuddy -c "Delete :NSServices" "$plist" >/dev/null 2>&1 || true
+    /usr/libexec/PlistBuddy -c "Set :InplaceAIBundleSchemaVersion 2" "$plist" >/dev/null 2>&1 || \
+        /usr/libexec/PlistBuddy -c "Add :InplaceAIBundleSchemaVersion string 2" "$plist"
+    /usr/libexec/PlistBuddy -c "Add :NSServices array" "$plist"
+    /usr/libexec/PlistBuddy -c "Add :NSServices:0 dict" "$plist"
+    /usr/libexec/PlistBuddy -c "Add :NSServices:0:NSMenuItem dict" "$plist"
+    /usr/libexec/PlistBuddy -c "Add :NSServices:0:NSMenuItem:default string Fix Grammar with InplaceAI" "$plist"
+    /usr/libexec/PlistBuddy -c "Add :NSServices:0:NSMessage string fixGrammar" "$plist"
+    /usr/libexec/PlistBuddy -c "Add :NSServices:0:NSPortName string ${APP_NAME}" "$plist"
+    /usr/libexec/PlistBuddy -c "Add :NSServices:0:NSSendTypes array" "$plist"
+    /usr/libexec/PlistBuddy -c "Add :NSServices:0:NSSendTypes:0 string NSStringPboardType" "$plist"
+    /usr/libexec/PlistBuddy -c "Add :NSServices:0:NSSendTypes:1 string public.utf8-plain-text" "$plist"
+    /usr/libexec/PlistBuddy -c "Add :NSServices:0:NSReturnTypes array" "$plist"
+    /usr/libexec/PlistBuddy -c "Add :NSServices:0:NSReturnTypes:0 string NSStringPboardType" "$plist"
+    /usr/libexec/PlistBuddy -c "Add :NSServices:0:NSReturnTypes:1 string public.utf8-plain-text" "$plist"
 }
 
 ensure_icns
@@ -107,6 +131,8 @@ else
     <string>${APP_NAME}</string>
     <key>CFBundleIdentifier</key>
     <string>com.inplaceai.desktop</string>
+    <key>InplaceAIBundleSchemaVersion</key>
+    <string>2</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
@@ -136,6 +162,8 @@ if [[ -f "$ICON_DST" ]]; then
     fi
 fi
 
+ensure_services_plist "$STAGED_APP/Contents/Info.plist"
+
 if [[ ! -d "$STAGED_APP" ]]; then
     echo "Error: app bundle not staged." >&2
     exit 1
@@ -143,7 +171,11 @@ fi
 
 if [[ -n "${CODESIGN_ID:-}" ]]; then
     echo "Codesigning with '${CODESIGN_ID}'..."
-    codesign --deep --force --options runtime --timestamp --sign "$CODESIGN_ID" "$STAGED_APP"
+    if [[ "$CODESIGN_ID" == "-" ]]; then
+        codesign --deep --force --sign "$CODESIGN_ID" --identifier com.inplaceai.desktop "$STAGED_APP"
+    else
+        codesign --deep --force --options runtime --timestamp --sign "$CODESIGN_ID" "$STAGED_APP"
+    fi
 else
     echo "Skipping codesign (set CODESIGN_ID to sign for distribution)."
 fi

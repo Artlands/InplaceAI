@@ -57,21 +57,7 @@ final class AppState: ObservableObject {
   }
 
   func triggerRewrite() {
-    guard !requiresAPIKey || !apiKey.isEmpty else {
-      alert = .missingAPIKey
-      return
-    }
-
-    guard AccessibilityAuthorizer.isTrusted else {
-      alert = .accessibilityDenied
-      return
-    }
-
-    guard !isProcessing else { return }
-
-    Task {
-      await runRewrite()
-    }
+    startWritingTools(with: .proofread)
   }
 
   func refreshAccessibilityStatus() {
@@ -101,9 +87,45 @@ final class AppState: ObservableObject {
     }
   }
 
-  private func runRewrite() async {
+  private func startWritingTools(with tool: WritingTool) {
+    guard canRunWritingTool() else { return }
+
+    Task {
+      await captureSelectionAndRun(tool)
+    }
+  }
+
+  private func runWritingTool(_ tool: WritingTool) {
+    guard canRunWritingTool() else { return }
+
+    guard let selection = lastSelection else {
+      startWritingTools(with: tool)
+      return
+    }
+
+    Task {
+      await generateSuggestion(for: selection, tool: tool)
+    }
+  }
+
+  private func canRunWritingTool() -> Bool {
+    guard !requiresAPIKey || !apiKey.isEmpty else {
+      alert = .missingAPIKey
+      return false
+    }
+
+    guard AccessibilityAuthorizer.isTrusted else {
+      alert = .accessibilityDenied
+      return false
+    }
+
+    return !isProcessing
+  }
+
+  private func captureSelectionAndRun(_ tool: WritingTool) async {
     isProcessing = true
     suggestionWindow.dismiss()
+    defer { isProcessing = false }
 
     do {
       let selection = try selectionMonitor.captureSelection()
@@ -111,30 +133,51 @@ final class AppState: ObservableObject {
 
       guard selection.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
         alert = .emptySelection
-        isProcessing = false
         return
       }
 
+      await generateSuggestion(for: selection, tool: tool)
+    } catch let error as SelectionError {
+      alert = .selection(error)
+    } catch {
+      alert = .network(error.localizedDescription)
+    }
+  }
+
+  private func generateSuggestion(for selection: TextSelection, tool: WritingTool) async {
+    isProcessing = true
+    defer { isProcessing = false }
+
+    let toolInstruction = tool.instruction(customInstruction: instruction)
+
+    do {
       // Show immediate progress bubble anchored to the captured selection.
       suggestionWindow.present(
         suggestion: Suggestion(
           originalText: selection.text,
-          rewrittenText: "Working on your rewrite...",
+          rewrittenText: "Working...",
           explanation: nil,
-          instruction: instruction,
-          promptTitle: PromptLibrary.title(for: instruction)
+          instruction: toolInstruction,
+          promptTitle: tool.title,
+          tool: tool
         ),
         anchor: selection.frame,
-        isProcessing: true,
-        onAction: { _ in }
-      )
+        isProcessing: true
+      ) { [weak self] action in
+        guard let self else { return }
+        if case .dismiss = action {
+          self.suggestion = nil
+        }
+      }
 
       let suggestion = try await openAIService.rewrite(
         text: selection.text,
-        instruction: instruction,
+        instruction: toolInstruction,
         apiKey: apiKey,
         model: model,
-        baseURL: baseURL
+        baseURL: baseURL,
+        promptTitle: tool.title,
+        tool: tool
       )
 
       self.suggestion = suggestion
@@ -149,15 +192,14 @@ final class AppState: ObservableObject {
           self.applySuggestion(suggestion, overrideText: text)
         case .dismiss:
           self.suggestion = nil
+        case .runTool(let tool):
+          self.runWritingTool(tool)
         }
       }
-    } catch let error as SelectionError {
-      alert = .selection(error)
     } catch {
       alert = .network(error.localizedDescription)
+      suggestionWindow.dismiss()
     }
-
-    isProcessing = false
   }
 
   private func applySuggestion(_ suggestion: Suggestion, overrideText: String?) {
@@ -176,11 +218,10 @@ final class AppState: ObservableObject {
   }
 
   private func pasteBoardFallback(with text: String) {
-    let hasRange = lastSelection?.selectedRange != nil
     selectionMonitor.ensureSelectionActive(
       for: lastSelection?.element,
       range: lastSelection?.selectedRange,
-      selectAllFallback: !hasRange
+      selectAllFallback: false
     )
     let pasteboard = NSPasteboard.general
     let existingItems = pasteboard.pasteboardItems?.compactMap { item -> NSPasteboardItem? in
@@ -200,7 +241,7 @@ final class AppState: ObservableObject {
       pasteboard.setString(text, forType: .string)
     }
 
-    // Give the target app time to apply the selection (especially when Command+A was synthesized).
+    // Give the target app time to restore focus before pasting over the active selection.
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
       CGSynthesizeCommandV()
     }

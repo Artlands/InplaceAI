@@ -12,9 +12,10 @@ final class InlineSuggestionWindow: NSObject {
   enum Action {
     case accept(String)
     case dismiss
+    case runTool(WritingTool)
   }
 
-  private let minBubbleWidth: CGFloat = 420
+  private let minBubbleWidth: CGFloat = 460
   private var window: InlineSuggestionPanel?
   private var eventMonitors: [Any] = []
   private var lastAnchor: CGRect?
@@ -38,6 +39,7 @@ final class InlineSuggestionWindow: NSObject {
     let contentView = SuggestionBubbleView(
       suggestion: suggestion,
       isProcessing: isProcessing,
+      runToolAction: { [weak self] tool in self?.handle(action: .runTool(tool)) },
       acceptAction: { [weak self] text in self?.handle(action: .accept(text)) },
       dismissAction: { [weak self] in self?.handle(action: .dismiss) }
     )
@@ -116,6 +118,8 @@ final class InlineSuggestionWindow: NSObject {
       dismiss(notify: true)
     case .accept:
       actionHandler?(action)
+    case .runTool:
+      actionHandler?(action)
     }
   }
 
@@ -156,7 +160,7 @@ final class InlineSuggestionWindow: NSObject {
       handler: { [weak self] event in
         guard let self, let window, !isDragging else { return }
         // Only dismiss when clicking outside the bubble.
-        if window.frame.contains(event.locationInWindow) { return }
+        if window.frame.contains(NSEvent.mouseLocation) { return }
         dismiss(notify: true)
       }
     ) {

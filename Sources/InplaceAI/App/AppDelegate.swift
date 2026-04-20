@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusBarController: StatusBarController?
     private var hotkeyController: HotkeyController?
     private var preferencesController: PreferencesController?
+    private var textServiceProvider: TextServiceProvider?
     private let accessibilityAuthorizer = AccessibilityAuthorizer()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -24,6 +25,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeyController = HotkeyController {
             appState.triggerRewrite()
         }
+        textServiceProvider = TextServiceProvider()
+        NSApp.servicesProvider = textServiceProvider
+        NSUpdateDynamicServices()
 
         accessibilityAuthorizer.ensureTrusted(prompt: false)
         appState.refreshAccessibilityStatus()

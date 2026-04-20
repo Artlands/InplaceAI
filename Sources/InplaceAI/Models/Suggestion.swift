@@ -16,6 +16,7 @@ struct Suggestion: Identifiable {
     let explanation: String?
     let instruction: String
     let promptTitle: String
+    let tool: WritingTool?
 }
 
 enum SelectionError: LocalizedError {
