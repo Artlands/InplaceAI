@@ -61,9 +61,11 @@ final class InlineSuggestionWindow: NSObject {
     window.backgroundColor = .clear
     window.isOpaque = false
     window.level = .statusBar
-    window.collectionBehavior = [.canJoinAllSpaces, .transient]
+    window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
     window.animationBehavior = .none
     window.ignoresMouseEvents = false
+    window.hidesOnDeactivate = false
+    window.canHide = false
     window.hasShadow = false
     window.styleMask.insert(.resizable)
     window.delegate = self
@@ -155,18 +157,6 @@ final class InlineSuggestionWindow: NSObject {
 
   private func startMonitoringEvents() {
     stopMonitoringEvents()
-    if let mouseMonitor = NSEvent.addGlobalMonitorForEvents(
-      matching: [.leftMouseDown, .rightMouseDown],
-      handler: { [weak self] event in
-        guard let self, let window, !isDragging else { return }
-        // Only dismiss when clicking outside the bubble.
-        if window.frame.contains(NSEvent.mouseLocation) { return }
-        dismiss(notify: true)
-      }
-    ) {
-      eventMonitors.append(mouseMonitor)
-    }
-
     if let keyMonitor = NSEvent.addLocalMonitorForEvents(
       matching: [.keyDown],
       handler: { [weak self] event in

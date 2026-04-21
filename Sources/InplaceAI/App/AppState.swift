@@ -205,51 +205,29 @@ final class AppState: ObservableObject {
   private func applySuggestion(_ suggestion: Suggestion, overrideText: String?) {
     suggestionWindow.dismiss()
     let replacement = overrideText ?? suggestion.rewrittenText
+    guard let selection = lastSelection else {
+      alert = .selection(.selectionChanged)
+      return
+    }
+
     do {
-      try selectionMonitor.replaceSelection(
-        with: replacement,
-        element: lastSelection?.element,
-        selectedRange: lastSelection?.selectedRange,
-        originalText: lastSelection?.text
-      )
-    } catch {
-      pasteBoardFallback(with: replacement)
-    }
-  }
-
-  private func pasteBoardFallback(with text: String) {
-    selectionMonitor.ensureSelectionActive(
-      for: lastSelection?.element,
-      range: lastSelection?.selectedRange,
-      selectAllFallback: false
-    )
-    let pasteboard = NSPasteboard.general
-    let existingItems = pasteboard.pasteboardItems?.compactMap { item -> NSPasteboardItem? in
-      let copy = NSPasteboardItem()
-      for type in item.types {
-        if let data = item.data(forType: type) {
-          copy.setData(data, forType: type)
-        }
+      if selection.requiresVerifiedPasteReplacement {
+        try selectionMonitor.replaceSelectionUsingVerifiedPaste(with: replacement, selection: selection)
+      } else {
+        try selectionMonitor.replaceSelection(
+          with: replacement,
+          element: selection.element,
+          selectedRange: selection.selectedRange,
+          originalText: selection.text
+        )
       }
-      return copy
-    }
-
-    pasteboard.clearContents()
-    pasteboard.setString(text, forType: .string)
-    if pasteboard.string(forType: .string) != text {
-      pasteboard.clearContents()
-      pasteboard.setString(text, forType: .string)
-    }
-
-    // Give the target app time to restore focus before pasting over the active selection.
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-      CGSynthesizeCommandV()
-    }
-
-    if let existingItems, !existingItems.isEmpty {
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-        pasteboard.clearContents()
-        pasteboard.writeObjects(existingItems)
+    } catch {
+      do {
+        try selectionMonitor.replaceSelectionUsingVerifiedPaste(with: replacement, selection: selection)
+      } catch let selectionError as SelectionError {
+        alert = .selection(selectionError)
+      } catch {
+        alert = .selection(.selectionChanged)
       }
     }
   }
