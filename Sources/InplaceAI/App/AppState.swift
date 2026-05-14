@@ -15,11 +15,14 @@ final class AppState: ObservableObject {
   @Published var suggestion: Suggestion?
   @Published var accessibilityTrusted = AccessibilityAuthorizer.isTrusted
   @Published var alert: AppAlert?
+  @Published var availableModels: [String] = []
+  @Published var isFetchingModels = false
 
   private let settingsStore = SettingsStore()
   private let selectionMonitor = SelectionMonitor()
   private let openAIService = OpenAIService()
   private let suggestionWindow = InlineSuggestionWindow()
+  private let modelFetcher = ModelFetcher()
   private var cancellables = Set<AnyCancellable>()
   private var accessibilityPollTask: Task<Void, Never>?
 
@@ -238,6 +241,29 @@ final class AppState: ObservableObject {
 
   private var requiresAPIKey: Bool {
     provider == .openAI
+  }
+
+  /// Forcefully close the suggestion window. Called on app termination
+  /// so the floating panel doesn't persist in the window server across
+  /// monitor reconfigurations.
+  func dismissSuggestionWindow() {
+    suggestionWindow.dismiss()
+  }
+
+  /// Fetch available models from the configured endpoint and update `availableModels`.
+  func refreshModels() {
+    guard !apiKey.isEmpty || provider != .openAI else { return }
+    isFetchingModels = true
+    Task {
+      defer { isFetchingModels = false }
+      do {
+        let models = try await modelFetcher.fetch(baseURL: baseURL, apiKey: apiKey)
+        availableModels = models
+      } catch {
+        // Silently fall back to an empty list — the user can still type a model name.
+        availableModels = []
+      }
+    }
   }
 
   func startAccessibilityPolling(

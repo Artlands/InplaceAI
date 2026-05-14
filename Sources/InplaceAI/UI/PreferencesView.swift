@@ -65,14 +65,6 @@ struct PreferencesView: View {
         _selectedPresetID = State(initialValue: PromptLibrary.presetID(for: appState.instruction))
     }
 
-    private let suggestedModels = [
-        "gpt-5-nano",
-        "gpt-5-mini",
-        "gpt-5.1",
-        "gpt-4.1-mini",
-        "gpt-4.1"
-    ]
-
     private var baseURLHelpText: String {
         switch appState.provider {
         case .openAI:
@@ -95,6 +87,25 @@ struct PreferencesView: View {
         }
     }
 
+    /// Models to show in the Picker. Falls back to a small static list if the
+    /// API hasn't returned results yet or the endpoint doesn't support model listing.
+    private var modelOptions: [String] {
+        if !appState.availableModels.isEmpty {
+            return appState.availableModels
+        }
+        // Static fallback so the picker isn't empty on first launch
+        return [
+            "gpt-4.1",
+            "gpt-4.1-mini",
+            "gpt-4.1-nano",
+            "gpt-4o",
+            "gpt-4o-mini",
+            "gpt-4.5-preview",
+            "o3-mini",
+            "o4-mini"
+        ]
+    }
+
     var body: some View {
         Form {
             Section("Provider & Model") {
@@ -103,6 +114,7 @@ struct PreferencesView: View {
                         Text(provider.displayName).tag(provider)
                     }
                 }
+
                 TextField("Base URL", text: $appState.baseURL)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
@@ -112,14 +124,33 @@ struct PreferencesView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
 
-                Picker("Model", selection: $appState.model) {
-                    ForEach(suggestedModels, id: \.self) { model in
-                        Text(model).tag(model)
+                HStack {
+                    Picker("Model", selection: $appState.model) {
+                        ForEach(modelOptions, id: \.self) { model in
+                            Text(model).tag(model)
+                        }
+                        Divider()
+                        Text("Custom…").tag("__custom__")
+                    }
+                    .frame(maxWidth: .infinity)
+
+                    if appState.isFetchingModels {
+                        ProgressView()
+                            .controlSize(.small)
+                            .scaleEffect(0.7)
+                    } else {
+                        Button("Refresh") {
+                            appState.refreshModels()
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Fetch the latest model list from the endpoint")
                     }
                 }
-                .pickerStyle(.segmented)
-                TextField("Custom model", text: $appState.model)
+
+                TextField("Or type a model name", text: $appState.model)
                     .textFieldStyle(.roundedBorder)
+                    .font(.system(.body, design: .monospaced))
+                    .disableAutocorrection(true)
             }
 
             Section("API Key") {
@@ -185,6 +216,9 @@ struct PreferencesView: View {
             if updated != apiKeyDraft {
                 apiKeyDraft = updated
             }
+        }
+        .onAppear {
+            appState.refreshModels()
         }
     }
 

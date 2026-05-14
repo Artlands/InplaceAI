@@ -37,4 +37,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        // Ensure the floating suggestion window is fully closed and released
+        // so it doesn't persist in the window server when monitors are reconfigured.
+        appState?.dismissSuggestionWindow()
+    }
 }

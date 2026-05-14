@@ -7,6 +7,10 @@ private final class InlineSuggestionPanel: NSPanel {
   override var canBecomeMain: Bool { true }
 }
 
+// Posted when the window should be explicitly closed (not just hidden)
+// so macOS doesn't re-show it on display reconfiguration.
+private let InlineSuggestionWindowForceCloseNotification = Notification.Name("com.inplaceai.forceCloseSuggestionWindow")
+
 @MainActor
 final class InlineSuggestionWindow: NSObject {
   enum Action {
@@ -27,6 +31,7 @@ final class InlineSuggestionWindow: NSObject {
   private var dragRecognizer: NSPanGestureRecognizer?
   private var isDragging = false
   private var actionHandler: ((Action) -> Void)?
+  private var displayReconfigObserver: NSObjectProtocol?
 
   func present(
     suggestion: Suggestion,
@@ -101,13 +106,22 @@ final class InlineSuggestionWindow: NSObject {
     NSApp.activate(ignoringOtherApps: true)
     window.makeKeyAndOrderFront(nil)
     startMonitoringEvents()
+    startObservingDisplayChanges()
   }
 
   func dismiss(notify: Bool = false) {
-    window?.orderOut(nil)
+    stopObservingDisplayChanges()
     stopMonitoringEvents()
+    // orderOut + close ensures the panel is fully removed from the window server,
+    // preventing it from being re-shown when monitors are reconfigured.
+    window?.orderOut(nil)
+    window?.close()
+    window?.contentView = nil
+    window = nil
     lastAnchor = nil
+    lastConvertedAnchor = nil
     lastOrigin = nil
+    lastSize = nil
     if notify {
       actionHandler?(.dismiss)
     }
@@ -177,6 +191,28 @@ final class InlineSuggestionWindow: NSObject {
       NSEvent.removeMonitor(monitor)
     }
     eventMonitors.removeAll()
+  }
+
+  /// Observe display reconfiguration (monitor plugged/unplugged) so we
+  /// can tear down the window before the window server decides to re-show it.
+  private func startObservingDisplayChanges() {
+    stopObservingDisplayChanges()
+    displayReconfigObserver = NotificationCenter.default.addObserver(
+      forName: NSApplication.didChangeScreenParametersNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor in
+        self?.dismiss()
+      }
+    }
+  }
+
+  private func stopObservingDisplayChanges() {
+    if let observer = displayReconfigObserver {
+      NotificationCenter.default.removeObserver(observer)
+      displayReconfigObserver = nil
+    }
   }
 
   private func clampedOrigin(
