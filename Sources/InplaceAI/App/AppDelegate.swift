@@ -1,7 +1,8 @@
 import AppKit
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    var appState: AppState?
+    let appState = AppState.shared
 
     private var statusBarController: StatusBarController?
     private var hotkeyController: HotkeyController?
@@ -15,14 +16,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         NSApp.setActivationPolicy(.accessory)
-        guard let appState else { return }
 
         preferencesController = PreferencesController(appState: appState)
         statusBarController = StatusBarController(
             appState: appState,
             preferencesController: preferencesController
         )
-        hotkeyController = HotkeyController {
+        hotkeyController = HotkeyController { [self] in
             appState.triggerRewrite()
         }
         textServiceProvider = TextServiceProvider()
@@ -41,6 +41,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         // Ensure the floating suggestion window is fully closed and released
         // so it doesn't persist in the window server when monitors are reconfigured.
-        appState?.dismissSuggestionWindow()
+        appState.dismissSuggestionWindow()
     }
 }

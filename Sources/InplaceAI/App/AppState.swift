@@ -5,6 +5,11 @@ import SwiftUI
 
 @MainActor
 final class AppState: ObservableObject {
+  /// Shared singleton — the canonical instance used by the entire app.
+  /// Created lazily on first access, which guarantees AppDelegate can reference
+  /// it from applicationDidFinishLaunching before any SwiftUI view body runs.
+  static let shared = AppState()
+
   @Published var apiKey: String
   @Published var provider: ModelProvider
   @Published var baseURL: String
@@ -26,7 +31,7 @@ final class AppState: ObservableObject {
   private var cancellables = Set<AnyCancellable>()
   private var accessibilityPollTask: Task<Void, Never>?
 
-  init() {
+  private init() {
     let settings = settingsStore.load()
     provider = settings.provider
     baseURL = settings.baseURL

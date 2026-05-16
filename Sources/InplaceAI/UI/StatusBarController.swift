@@ -57,10 +57,15 @@ final class StatusBarController {
             return image
         }
 
-        return NSImage(
+        guard let image = NSImage(
             systemSymbolName: "text.badge.star",
             accessibilityDescription: "InplaceAI"
-        )
+        ) else {
+            return nil
+        }
+        image.isTemplate = true
+        image.size = NSSize(width: 18, height: 18)
+        return image
     }
 
     private func observeState() {
