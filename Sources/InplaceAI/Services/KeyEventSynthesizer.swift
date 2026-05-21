@@ -1,7 +1,7 @@
 import ApplicationServices
 import Foundation
 
-func CGSynthesizeCommandV() {
+@MainActor func CGSynthesizeCommandV() {
   guard let source = CGEventSource(stateID: .combinedSessionState) else { return }
 
   let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true)
@@ -13,7 +13,7 @@ func CGSynthesizeCommandV() {
   keyUp?.post(tap: .cghidEventTap)
 }
 
-func CGSynthesizeCommandC() {
+@MainActor func CGSynthesizeCommandC() {
   guard let source = CGEventSource(stateID: .combinedSessionState) else { return }
 
   let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 8, keyDown: true)  // C key
@@ -25,14 +25,14 @@ func CGSynthesizeCommandC() {
   keyUp?.post(tap: .cghidEventTap)
 }
 
-func CGSynthesizeCommandA() {
+@MainActor func CGSynthesizeCommandA() {
   guard let source = CGEventSource(stateID: .combinedSessionState) else { return }
 
-  let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true)  // A key
+  let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 30, keyDown: true)  // A key (kVK_ANSI_A)
   keyDown?.flags = .maskCommand
   keyDown?.post(tap: .cghidEventTap)
 
-  let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false)
+  let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 30, keyDown: false)
   keyUp?.flags = .maskCommand
   keyUp?.post(tap: .cghidEventTap)
 }

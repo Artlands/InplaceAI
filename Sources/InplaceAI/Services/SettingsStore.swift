@@ -41,16 +41,35 @@ struct SettingsStore {
         static let apiKey = "settings.apiKey"
     }
 
-    private let defaults = UserDefaults.standard
+    private let settingsFile: URL
+
+    init() {
+        let directory = FileManager.default.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first!
+        let bundle = "com.inplaceai.desktop"
+        let dir = directory.appendingPathComponent(bundle, isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        self.settingsFile = dir.appendingPathComponent("settings.json")
+    }
+
+    private func loadDict() -> [String: String]? {
+        guard FileManager.default.fileExists(atPath: settingsFile.path) else { return nil }
+        let data = try? Data(contentsOf: settingsFile)
+        guard let data else { return nil }
+        return try? JSONSerialization.jsonObject(with: data) as? [String: String]
+    }
 
     func load() -> AppSettings {
-        let providerRaw = defaults.string(forKey: Keys.provider) ?? ModelProvider.openAI.rawValue
+        let dict = loadDict()
+        let providerRaw = dict?[Keys.provider] ?? ModelProvider.openAI.rawValue
         let provider = ModelProvider(rawValue: providerRaw) ?? .openAI
-        let baseURL = defaults.string(forKey: Keys.baseURL) ?? provider.defaultBaseURL
-        let model = defaults.string(forKey: Keys.model) ?? "gpt-5-nano"
-        let instruction = defaults.string(forKey: Keys.instruction) ??
+        let baseURL = dict?[Keys.baseURL] ?? provider.defaultBaseURL
+        let model = dict?[Keys.model] ?? "gpt-5-nano"
+        let instruction = dict?[Keys.instruction] ??
         "Rewrite the text with clearer grammar and tone while preserving the author's intent. Return only the revised text."
-        let apiKey = defaults.string(forKey: Keys.apiKey) ?? ""
+        let apiKey = dict?[Keys.apiKey] ?? ""
         return AppSettings(
             provider: provider,
             baseURL: baseURL,
@@ -61,22 +80,37 @@ struct SettingsStore {
     }
 
     func save(provider: ModelProvider) {
-        defaults.set(provider.rawValue, forKey: Keys.provider)
+        var dict = loadDict() ?? [:]
+        dict[Keys.provider] = provider.rawValue
+        save(dict)
     }
 
     func save(baseURL: String) {
-        defaults.set(baseURL, forKey: Keys.baseURL)
+        var dict = loadDict() ?? [:]
+        dict[Keys.baseURL] = baseURL
+        save(dict)
     }
 
     func save(model: String) {
-        defaults.set(model, forKey: Keys.model)
+        var dict = loadDict() ?? [:]
+        dict[Keys.model] = model
+        save(dict)
     }
 
     func save(instruction: String) {
-        defaults.set(instruction, forKey: Keys.instruction)
+        var dict = loadDict() ?? [:]
+        dict[Keys.instruction] = instruction
+        save(dict)
     }
 
     func save(apiKey: String) {
-        defaults.set(apiKey, forKey: Keys.apiKey)
+        var dict = loadDict() ?? [:]
+        dict[Keys.apiKey] = apiKey
+        save(dict)
+    }
+
+    private func save(_ dict: [String: String]) {
+        let data = try? JSONSerialization.data(withJSONObject: dict)
+        try? data?.write(to: settingsFile)
     }
 }

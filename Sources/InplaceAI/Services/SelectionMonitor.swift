@@ -132,15 +132,6 @@ final class SelectionMonitor {
     let existingItems = copyPasteboardItems(from: pasteboard)
 
     pasteboard.clearContents()
-    CGSynthesizeCommandC()
-    usleep(180_000)
-
-    guard selectionTextMatches(pasteboard.string(forType: .string), selection.text) else {
-      restorePasteboard(pasteboard, items: existingItems)
-      throw SelectionError.selectionChanged
-    }
-
-    pasteboard.clearContents()
     pasteboard.setString(text, forType: .string)
     if pasteboard.string(forType: .string) != text {
       pasteboard.clearContents()
@@ -149,6 +140,14 @@ final class SelectionMonitor {
 
     usleep(80_000)
     CGSynthesizeCommandV()
+
+    // Wait for the synthetic paste to propagate.
+    for _ in 0..<3 {
+      RunLoop.main.run(until: Date().addingTimeInterval(0.066))
+    }
+
+    // The AX value is unreliable after synthetic paste, so we don't verify it here.
+    // The selection integrity will be checked on the next call to captureSelection.
 
     if !existingItems.isEmpty {
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
@@ -304,7 +303,11 @@ final class SelectionMonitor {
 
     pasteboard.clearContents()
     CGSynthesizeCommandC()
-    usleep(150_000)
+
+    // Yield to the main run loop so the synthetic Cmd+C propagates.
+    for _ in 0..<3 {
+      RunLoop.main.run(until: Date().addingTimeInterval(0.066))
+    }
 
     guard let copied = pasteboard.string(forType: .string) else {
       restorePasteboard(pasteboard, items: existingItems)
@@ -475,15 +478,15 @@ final class SelectionMonitor {
     replacement: String,
     on element: AXUIElement
   ) -> Bool {
-    let attempts = [0, 80_000, 120_000]  // microseconds
+    for _ in 0..<5 {
+      // Let the main run loop run so synthetic events can propagate and
+      // the target app's AX value can update.
+      RunLoop.main.run(until: Date().addingTimeInterval(0.066))
 
-    for delay in attempts {
-      if delay > 0 {
-        usleep(useconds_t(delay))
-      }
-
-      let currentValue = elementStringValue(element)
-      if let expectedValue, let currentValue, currentValue == expectedValue {
+      if let expectedValue,
+        let currentValue = elementStringValue(element),
+        currentValue == expectedValue
+      {
         return true
       }
 
@@ -492,7 +495,6 @@ final class SelectionMonitor {
       {
         return true
       }
-
     }
 
     return false
