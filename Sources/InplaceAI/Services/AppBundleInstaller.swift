@@ -6,10 +6,12 @@ import Foundation
 enum AppBundleInstaller {
     private static let bundleName = "InplaceAI"
     private static let bundleIdentifier = "com.inplaceai.desktop"
-    private static let bundleSchemaVersion = "2"
+    private static let bundleSchemaVersion = "3"
     private static let sourceExecutableHashKey = "InplaceAISourceExecutableSHA256"
-    private static let serviceMenuTitle = "Fix Grammar with InplaceAI"
-    private static let serviceMessage = "fixGrammar"
+    private static let fixGrammarServiceMenuTitle = "Fix Grammar with InplaceAI"
+    private static let fixGrammarServiceMessage = "fixGrammar"
+    private static let explainServiceMenuTitle = "Explain with InplaceAI"
+    private static let explainServiceMessage = "explainSelection"
     private static let servicePasteboardTypes = [
         "NSStringPboardType",
         NSPasteboard.PasteboardType.string.rawValue
@@ -120,10 +122,10 @@ enum AppBundleInstaller {
                     <key>NSMenuItem</key>
                     <dict>
                         <key>default</key>
-                        <string>\(serviceMenuTitle)</string>
+                        <string>\(fixGrammarServiceMenuTitle)</string>
                     </dict>
                     <key>NSMessage</key>
-                    <string>\(serviceMessage)</string>
+                    <string>\(fixGrammarServiceMessage)</string>
                     <key>NSPortName</key>
                     <string>\(bundleName)</string>
                     <key>NSSendTypes</key>
@@ -132,6 +134,22 @@ enum AppBundleInstaller {
                         <string>\(servicePasteboardTypes[1])</string>
                     </array>
                     <key>NSReturnTypes</key>
+                    <array>
+                        <string>\(servicePasteboardTypes[0])</string>
+                        <string>\(servicePasteboardTypes[1])</string>
+                    </array>
+                </dict>
+                <dict>
+                    <key>NSMenuItem</key>
+                    <dict>
+                        <key>default</key>
+                        <string>\(explainServiceMenuTitle)</string>
+                    </dict>
+                    <key>NSMessage</key>
+                    <string>\(explainServiceMessage)</string>
+                    <key>NSPortName</key>
+                    <string>\(bundleName)</string>
+                    <key>NSSendTypes</key>
                     <array>
                         <string>\(servicePasteboardTypes[0])</string>
                         <string>\(servicePasteboardTypes[1])</string>

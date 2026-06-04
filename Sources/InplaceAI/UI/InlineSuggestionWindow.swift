@@ -109,6 +109,27 @@ final class InlineSuggestionWindow: NSObject {
     startObservingDisplayChanges()
   }
 
+  func presentExplanation(
+    suggestion: Suggestion,
+    anchor: CGRect?,
+    isProcessing: Bool,
+    onDismiss: @escaping () -> Void
+  ) {
+    actionHandler = { action in
+      if case .dismiss = action {
+        onDismiss()
+      }
+    }
+
+    let contentView = ExplanationBubbleView(
+      suggestion: suggestion,
+      isProcessing: isProcessing,
+      dismissAction: { [weak self] in self?.handle(action: .dismiss) }
+    )
+
+    presentContentView(contentView, anchor: anchor)
+  }
+
   func dismiss(notify: Bool = false) {
     stopObservingDisplayChanges()
     stopMonitoringEvents()
@@ -137,6 +158,67 @@ final class InlineSuggestionWindow: NSObject {
     case .runTool:
       actionHandler?(action)
     }
+  }
+
+  private func presentContentView<Content: View>(_ contentView: Content, anchor: CGRect?) {
+    let hostingView = NSHostingView(rootView: contentView)
+    hostingView.translatesAutoresizingMaskIntoConstraints = false
+
+    let window =
+      window
+      ?? InlineSuggestionPanel(
+        contentRect: CGRect(origin: .zero, size: CGSize(width: 360, height: 180)),
+        styleMask: [.borderless],
+        backing: .buffered,
+        defer: false
+      )
+
+    window.contentView = hostingView
+    window.isReleasedWhenClosed = false
+    window.backgroundColor = .clear
+    window.isOpaque = false
+    window.level = .statusBar
+    window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+    window.animationBehavior = .none
+    window.ignoresMouseEvents = false
+    window.hidesOnDeactivate = false
+    window.canHide = false
+    window.hasShadow = false
+    window.styleMask.insert(.resizable)
+    window.delegate = self
+    // We handle dragging manually to avoid AppKit's built-in move logic fighting our gesture and causing flicker.
+    window.isMovableByWindowBackground = false
+    self.window = window
+
+    let availableWidth = (window.screen ?? NSScreen.main)?.visibleFrame.width ?? 800
+    let widthLimit = max(320, availableWidth - 32)
+    hostingView.widthAnchor.constraint(lessThanOrEqualToConstant: widthLimit).isActive = true
+    hostingView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+    attachDragRecognizer(to: hostingView, window: window)
+    hostingView.layoutSubtreeIfNeeded()
+
+    let fittingSize = hostingView.fittingSize
+    let targetSize: CGSize
+    if let lastSize {
+      targetSize = CGSize(
+        width: max(minBubbleWidth, min(lastSize.width, widthLimit)),
+        height: max(fittingSize.height, lastSize.height)
+      )
+    } else {
+      targetSize = fittingSize
+    }
+
+    window.minSize = CGSize(
+      width: max(minBubbleWidth, fittingSize.width * 0.75),
+      height: max(180, fittingSize.height * 0.8)
+    )
+    window.setContentSize(targetSize)
+    positionWindow(window, anchor: anchor)
+    NSApp.activate(ignoringOtherApps: true)
+    window.makeKeyAndOrderFront(nil)
+    startMonitoringEvents()
+    startObservingDisplayChanges()
   }
 
   private func positionWindow(_ window: NSWindow, anchor: CGRect?) {

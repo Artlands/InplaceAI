@@ -15,6 +15,7 @@ final class AppState: ObservableObject {
   @Published var baseURL: String
   @Published var model: String
   @Published var instruction: String
+  @Published var startAtLogin: Bool
   @Published var isProcessing = false
   @Published var lastSelection: TextSelection?
   @Published var suggestion: Suggestion?
@@ -23,11 +24,18 @@ final class AppState: ObservableObject {
   @Published var availableModels: [String] = []
   @Published var isFetchingModels = false
 
+  func toggleStartAtLogin() {
+    let newValue = !startAtLogin
+    startAtLogin = newValue
+    launchController.setStartAtLogin(newValue)
+  }
+
   private let settingsStore = SettingsStore()
   private let selectionMonitor = SelectionMonitor()
   private let openAIService = OpenAIService()
   private let suggestionWindow = InlineSuggestionWindow()
   private let modelFetcher = ModelFetcher()
+  private let launchController = LaunchController()
   private var cancellables = Set<AnyCancellable>()
   private var accessibilityPollTask: Task<Void, Never>?
 
@@ -37,7 +45,17 @@ final class AppState: ObservableObject {
     baseURL = settings.baseURL
     model = settings.model
     instruction = settings.instruction
+    let savedStartAtLogin = settings.startAtLogin
+    startAtLogin = launchController.isStartAtLogin() ? true : savedStartAtLogin
     apiKey = settings.apiKey
+    
+    if startAtLogin != savedStartAtLogin {
+        settingsStore.save(startAtLogin: startAtLogin)
+    }
+    
+    if startAtLogin {
+        launchController.setStartAtLogin(true)
+    }
 
     $provider
       .dropFirst()
@@ -62,10 +80,49 @@ final class AppState: ObservableObject {
       .dropFirst()
       .sink { [weak self] in self?.settingsStore.save(instruction: $0) }
       .store(in: &cancellables)
+
+    $startAtLogin
+      .dropFirst()
+      .sink { [weak self] in
+        self?.settingsStore.save(startAtLogin: $0)
+        self?.launchController.setStartAtLogin($0)
+      }
+      .store(in: &cancellables)
   }
 
   func triggerRewrite() {
     startWritingTools(with: .proofread)
+  }
+
+  func triggerExplain() {
+    guard canRunSelectionAction() else { return }
+
+    Task {
+      try? await Task.sleep(nanoseconds: 180_000_000)
+      await captureSelectionAndExplain()
+    }
+  }
+
+  func explainProvidedText(_ text: String) {
+    guard canRunModelAction() else { return }
+
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard trimmed.isEmpty == false else {
+      alert = .emptySelection
+      return
+    }
+
+    Task {
+      await generateExplanation(
+        for: TextSelection(
+          text: text,
+          frame: nil,
+          element: nil,
+          selectedRange: nil,
+          sourceBundleIdentifier: nil
+        )
+      )
+    }
   }
 
   func refreshAccessibilityStatus() {
@@ -96,7 +153,7 @@ final class AppState: ObservableObject {
   }
 
   private func startWritingTools(with tool: WritingTool) {
-    guard canRunWritingTool() else { return }
+    guard canRunSelectionAction() else { return }
 
     Task {
       await captureSelectionAndRun(tool)
@@ -104,7 +161,7 @@ final class AppState: ObservableObject {
   }
 
   private func runWritingTool(_ tool: WritingTool) {
-    guard canRunWritingTool() else { return }
+    guard canRunSelectionAction() else { return }
 
     guard let selection = lastSelection else {
       startWritingTools(with: tool)
@@ -116,14 +173,22 @@ final class AppState: ObservableObject {
     }
   }
 
-  private func canRunWritingTool() -> Bool {
-    guard !requiresAPIKey || !apiKey.isEmpty else {
-      alert = .missingAPIKey
+  private func canRunSelectionAction() -> Bool {
+    guard canRunModelAction() else {
       return false
     }
 
     guard AccessibilityAuthorizer.isTrusted else {
       alert = .accessibilityDenied
+      return false
+    }
+
+    return true
+  }
+
+  private func canRunModelAction() -> Bool {
+    guard !requiresAPIKey || !apiKey.isEmpty else {
+      alert = .missingAPIKey
       return false
     }
 
@@ -145,6 +210,28 @@ final class AppState: ObservableObject {
       }
 
       await generateSuggestion(for: selection, tool: tool)
+    } catch let error as SelectionError {
+      alert = .selection(error)
+    } catch {
+      alert = .network(error.localizedDescription)
+    }
+  }
+
+  private func captureSelectionAndExplain() async {
+    isProcessing = true
+    suggestionWindow.dismiss()
+    defer { isProcessing = false }
+
+    do {
+      let selection = try selectionMonitor.captureSelectionForReading()
+      lastSelection = selection
+
+      guard selection.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+        alert = .emptySelection
+        return
+      }
+
+      await generateExplanation(for: selection)
     } catch let error as SelectionError {
       alert = .selection(error)
     } catch {
@@ -203,6 +290,54 @@ final class AppState: ObservableObject {
         case .runTool(let tool):
           self.runWritingTool(tool)
         }
+      }
+    } catch {
+      alert = .network(error.localizedDescription)
+      suggestionWindow.dismiss()
+    }
+  }
+
+  private func generateExplanation(for selection: TextSelection) async {
+    isProcessing = true
+    defer { isProcessing = false }
+
+    let explanationInstruction = """
+      Explain the selected text clearly in plain language. Clarify the main idea, important context, specialized terms, and any implied meaning. Do not rewrite, edit, or continue the source text. Return only the explanation.
+      """
+
+    do {
+      suggestionWindow.presentExplanation(
+        suggestion: Suggestion(
+          originalText: selection.text,
+          rewrittenText: "Explaining...",
+          explanation: nil,
+          instruction: explanationInstruction,
+          promptTitle: "Explain",
+          tool: nil
+        ),
+        anchor: selection.frame,
+        isProcessing: true
+      ) { [weak self] in
+        self?.suggestion = nil
+      }
+
+      let explanation = try await openAIService.rewrite(
+        text: selection.text,
+        instruction: explanationInstruction,
+        apiKey: apiKey,
+        model: model,
+        baseURL: baseURL,
+        promptTitle: "Explain",
+        tool: nil
+      )
+
+      self.suggestion = explanation
+      suggestionWindow.presentExplanation(
+        suggestion: explanation,
+        anchor: selection.frame,
+        isProcessing: false
+      ) { [weak self] in
+        self?.suggestion = nil
       }
     } catch {
       alert = .network(error.localizedDescription)

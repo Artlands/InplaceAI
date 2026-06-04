@@ -5,6 +5,7 @@ InplaceAI is a macOS menu bar assistant that brings Writing Tools-style edits to
 ## Highlights
 - **System-wide**: works in any text field that exposes accessibility text (Mail, Notes, Outlook, etc.).
 - **Writing Tools panel**: choose Proofread, Rewrite, tone changes, summaries, key points, lists, or your saved custom prompt without switching apps.
+- **Explanation popup**: explain selected text in a read-only floating popup, useful for PDFs, webpages, and other non-editing contexts.
 - **Configurable AI**: paste your OpenAI key once (stored locally in the app’s preferences), pick a model, and fine-tune the rewrite instruction.
 - **Privacy-aware**: only the raw selection is sent to OpenAI—nothing is masked or pre-processed—so you can see exactly what leaves your machine.
 
@@ -35,9 +36,10 @@ Use a currently supported OpenAI chat model (default: `gpt-5-nano`); suggested o
 3. Pick a writing mode and review the floating panel:
    - **Replace** or `⌘Return` injects the rewrite directly (falls back to clipboard + paste if direct replacement fails).
    - **Dismiss** closes the bubble without changes.
+4. Press `⌥⇧X` or choose **Explain Selection…** from the menu bar icon to explain selected text without replacing it.
 
 ### Right-click / Services
-After launching the bundled app once, macOS exposes **Fix Grammar with InplaceAI** in the Services menu for selected text. In many apps this appears under right-click ▸ **Services**; it sends the selected text to the configured model and returns the replacement directly to the source app.
+After launching the bundled app once, macOS exposes **Fix Grammar with InplaceAI** and **Explain with InplaceAI** in the Services menu for selected text. In many apps this appears under right-click ▸ **Services**; Fix Grammar returns replacement text directly to the source app, while Explain opens a read-only popup.
 
 ## Architecture
 - **SwiftUI App + NSStatusItem** for lightweight menu bar residency (`InplaceAIApp`, `StatusBarController`).
@@ -45,8 +47,8 @@ After launching the bundled app once, macOS exposes **Fix Grammar with InplaceAI
 - **AI client** (`OpenAIService`) calls `chat/completions`, parameterized by the user’s model/instruction.
 - **State & storage** (`AppState`, `SettingsStore`) handle API keys, prompt presets, and orchestrate rewrite tasks.
 - **Inline UI** (`InlineSuggestionWindow`, `SuggestionBubbleView`) renders the floating Writing Tools panel and manages mode selection, accept, and dismiss actions.
-- **Global shortcut** (`HotkeyController`) registers the `⌥⇧R` trigger using Carbon hotkeys so the workflow stays in-app.
-- **macOS Services** (`TextServiceProvider`) exposes the right-click Services action for direct replacement.
+- **Global shortcuts** (`HotkeyController`) register `⌥⇧R` for Writing Tools and `⌥⇧X` for Explain so the workflow stays in-app.
+- **macOS Services** (`TextServiceProvider`) exposes right-click Services actions for direct replacement and read-only explanation.
 
 ## Testing & Debugging
 - Use `swift build` / `swift run` for iterative development. If sandboxed environments block SwiftPM caches, point `SWIFTPM_CONFIGURATION_PATH` and `SWIFTPM_CACHE_PATH` to writable directories before building.

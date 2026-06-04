@@ -6,6 +6,7 @@ struct AppSettings {
     var model: String
     var instruction: String
     var apiKey: String
+    var startAtLogin: Bool
 }
 
 enum ModelProvider: String, CaseIterable, Identifiable {
@@ -39,6 +40,7 @@ struct SettingsStore {
         static let model = "settings.model"
         static let instruction = "settings.instruction"
         static let apiKey = "settings.apiKey"
+        static let startAtLogin = "settings.startAtLogin"
     }
 
     private let settingsFile: URL
@@ -70,12 +72,14 @@ struct SettingsStore {
         let instruction = dict?[Keys.instruction] ??
         "Rewrite the text with clearer grammar and tone while preserving the author's intent. Return only the revised text."
         let apiKey = dict?[Keys.apiKey] ?? ""
+        let startAtLogin = dict?[Keys.startAtLogin] == "true"
         return AppSettings(
             provider: provider,
             baseURL: baseURL,
             model: model,
             instruction: instruction,
-            apiKey: apiKey
+            apiKey: apiKey,
+            startAtLogin: startAtLogin
         )
     }
 
@@ -106,6 +110,12 @@ struct SettingsStore {
     func save(apiKey: String) {
         var dict = loadDict() ?? [:]
         dict[Keys.apiKey] = apiKey
+        save(dict)
+    }
+
+    func save(startAtLogin: Bool) {
+        var dict = loadDict() ?? [:]
+        dict[Keys.startAtLogin] = startAtLogin ? "true" : "false"
         save(dict)
     }
 

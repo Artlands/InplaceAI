@@ -22,9 +22,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appState: appState,
             preferencesController: preferencesController
         )
-        hotkeyController = HotkeyController { [self] in
-            appState.triggerRewrite()
-        }
+        hotkeyController = HotkeyController(
+            rewriteHandler: { [self] in
+                appState.triggerRewrite()
+            },
+            explainHandler: { [self] in
+                appState.triggerExplain()
+            }
+        )
         textServiceProvider = TextServiceProvider()
         NSApp.servicesProvider = textServiceProvider
         NSUpdateDynamicServices()

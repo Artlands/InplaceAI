@@ -143,7 +143,7 @@ struct OpenAIService {
         let payload = OpenAIRequest(
             model: model,
             messages: [
-                .init(role: "system", content: "You are a writing assistant that rewrites user-selected text inline."),
+                .init(role: "system", content: "You are a writing assistant that transforms user-selected text according to the requested instruction."),
                 .init(role: "user", content: """
                 INSTRUCTION:
                 \(instruction)

@@ -52,7 +52,7 @@ enum SelectionError: LocalizedError {
         case .noFocusedElement:
             return "No focused text field was detected."
         case .emptySelection:
-            return "Select some text before asking for a rewrite."
+            return "Select some text before using InplaceAI."
         case .accessibilityDenied:
             return "InplaceAI requires Accessibility permission."
         case .unsupportedElement:

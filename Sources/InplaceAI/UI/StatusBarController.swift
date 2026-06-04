@@ -9,11 +9,17 @@ final class StatusBarController {
     private let preferencesController: PreferencesController?
     private let repositoryURL = URL(string: "https://github.com/Artlands/InplaceAI")
     private lazy var appIcon: NSImage? = loadAppIcon()
+    private lazy var startAtLoginItem: NSMenuItem = {
+        let item = NSMenuItem(title: "Start at login", action: #selector(toggleStartAtLogin), keyEquivalent: "")
+        item.keyEquivalentModifierMask = []
+        return item
+    }()
 
     init(appState: AppState, preferencesController: PreferencesController?) {
         self.appState = appState
         self.preferencesController = preferencesController
         configureStatusItem()
+        updateStartAtLoginMenuItem(appState.startAtLogin)
         observeState()
     }
 
@@ -30,6 +36,11 @@ final class StatusBarController {
             keyEquivalent: ""
         ).target = self
         menu.addItem(
+            withTitle: "Explain Selection… (⌥⇧X)",
+            action: #selector(explainSelection),
+            keyEquivalent: ""
+        ).target = self
+        menu.addItem(
             withTitle: "Preferences…",
             action: #selector(openPreferences),
             keyEquivalent: ","
@@ -39,6 +50,8 @@ final class StatusBarController {
             action: #selector(openAbout),
             keyEquivalent: ""
         ).target = self
+        menu.addItem(.separator())
+        menu.addItem(startAtLoginItem)
         menu.addItem(.separator())
         menu.addItem(
             withTitle: "Quit InplaceAI",
@@ -84,12 +97,24 @@ final class StatusBarController {
                 self?.presentAlert(alert)
             }
             .store(in: &cancellables)
+
+        appState.$startAtLogin
+            .sink { [weak self] startAtLogin in
+                self?.updateStartAtLoginMenuItem(startAtLogin)
+            }
+            .store(in: &cancellables)
     }
 
     @objc
     private func rewriteSelection() {
         statusItem.menu?.cancelTracking()
         appState.triggerRewrite()
+    }
+
+    @objc
+    private func explainSelection() {
+        statusItem.menu?.cancelTracking()
+        appState.triggerExplain()
     }
 
     @objc
@@ -144,8 +169,17 @@ final class StatusBarController {
     }
 
     @objc
+    private func toggleStartAtLogin() {
+        appState.toggleStartAtLogin()
+    }
+
+    @objc
     private func quitApp() {
         NSApp.terminate(nil)
+    }
+    
+    private func updateStartAtLoginMenuItem(_ startAtLogin: Bool) {
+        startAtLoginItem.state = startAtLogin ? .on : .off
     }
 
     private func presentAlert(_ alert: AppAlert) {

@@ -2,24 +2,34 @@ import Carbon
 import Foundation
 
 final class HotkeyController {
-    private var hotKeyRef: EventHotKeyRef?
+    private var rewriteHotKeyRef: EventHotKeyRef?
+    private var explainHotKeyRef: EventHotKeyRef?
     private var eventHandler: EventHandlerRef?
-    private let handler: @Sendable () -> Void
+    private let rewriteHandler: @Sendable () -> Void
+    private let explainHandler: @Sendable () -> Void
 
-    init(handler: @escaping @MainActor () -> Void) {
-        self.handler = {
+    init(
+        rewriteHandler: @escaping @MainActor () -> Void,
+        explainHandler: @escaping @MainActor () -> Void
+    ) {
+        self.rewriteHandler = {
             Task { @MainActor in
-                handler()
+                rewriteHandler()
             }
         }
-        registerHotkey()
+        self.explainHandler = {
+            Task { @MainActor in
+                explainHandler()
+            }
+        }
+        registerHotkeys()
     }
 
     deinit {
-        unregisterHotkey()
+        unregisterHotkeys()
     }
 
-    private func registerHotkey() {
+    private func registerHotkeys() {
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
         InstallEventHandler(
             GetEventDispatcherTarget(),
@@ -30,16 +40,33 @@ final class HotkeyController {
             &eventHandler
         )
 
-        let hotKeyID = EventHotKeyID(signature: OSType(0x49415021), id: UInt32(1))
         let modifiers = UInt32(optionKey | shiftKey)
-        let keyCode: UInt32 = 15 // R key
-        RegisterEventHotKey(keyCode, modifiers, hotKeyID, GetEventDispatcherTarget(), 0, &hotKeyRef)
+        RegisterEventHotKey(
+            UInt32(15), // R key
+            modifiers,
+            Hotkey.rewrite.eventID,
+            GetEventDispatcherTarget(),
+            0,
+            &rewriteHotKeyRef
+        )
+        RegisterEventHotKey(
+            UInt32(7), // X key
+            modifiers,
+            Hotkey.explain.eventID,
+            GetEventDispatcherTarget(),
+            0,
+            &explainHotKeyRef
+        )
     }
 
-    private func unregisterHotkey() {
-        if let hotKeyRef {
-            UnregisterEventHotKey(hotKeyRef)
-            self.hotKeyRef = nil
+    private func unregisterHotkeys() {
+        if let rewriteHotKeyRef {
+            UnregisterEventHotKey(rewriteHotKeyRef)
+            self.rewriteHotKeyRef = nil
+        }
+        if let explainHotKeyRef {
+            UnregisterEventHotKey(explainHotKeyRef)
+            self.explainHotKeyRef = nil
         }
         if let eventHandler {
             RemoveEventHandler(eventHandler)
@@ -47,8 +74,40 @@ final class HotkeyController {
         }
     }
 
-    fileprivate func handleHotkey() {
-        handler()
+    fileprivate func handleHotkey(signature: OSType, id: UInt32) {
+        switch Hotkey(signature: signature, id: id) {
+        case .rewrite:
+            rewriteHandler()
+        case .explain:
+            explainHandler()
+        case nil:
+            break
+        }
+    }
+}
+
+private enum Hotkey {
+    case rewrite
+    case explain
+
+    var eventID: EventHotKeyID {
+        switch self {
+        case .rewrite:
+            return EventHotKeyID(signature: OSType(0x49414952), id: 1) // IAIR
+        case .explain:
+            return EventHotKeyID(signature: OSType(0x49414958), id: 1) // IAIX
+        }
+    }
+
+    init?(signature: OSType, id: UInt32) {
+        switch (signature, id) {
+        case (Hotkey.rewrite.eventID.signature, Hotkey.rewrite.eventID.id):
+            self = .rewrite
+        case (Hotkey.explain.eventID.signature, Hotkey.explain.eventID.id):
+            self = .explain
+        default:
+            return nil
+        }
     }
 }
 
@@ -66,10 +125,8 @@ private let hotKeyEventHandler: EventHandlerUPP = { _, eventRef, userData in
         &hotKeyID
     )
 
-    if hotKeyID.id == 1 {
-        let controller = Unmanaged<HotkeyController>.fromOpaque(userData).takeUnretainedValue()
-        controller.handleHotkey()
-    }
+    let controller = Unmanaged<HotkeyController>.fromOpaque(userData).takeUnretainedValue()
+    controller.handleHotkey(signature: hotKeyID.signature, id: hotKeyID.id)
 
     return noErr
 }

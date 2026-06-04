@@ -210,6 +210,10 @@ struct PreferencesView: View {
                     appState.requestAccessibilityPermission()
                 }
             }
+
+            Section("Startup") {
+                Toggle("Start at login", isOn: $appState.startAtLogin.animation())
+            }
         }
         .padding()
         .onReceive(appState.$apiKey) { updated in

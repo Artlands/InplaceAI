@@ -44,4 +44,30 @@ final class TextServiceProvider: NSObject {
             error.pointee = rewriteError.localizedDescription as NSString
         }
     }
+
+    @objc
+    func explainSelection(
+        _ pasteboard: NSPasteboard,
+        userData: String?,
+        error: AutoreleasingUnsafeMutablePointer<NSString?>
+    ) {
+        guard let selectedText = pasteboard.string(forType: .string),
+            selectedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        else {
+            error.pointee = "Select text before using InplaceAI." as NSString
+            return
+        }
+
+        let settings = settingsStore.load()
+        guard settings.provider != .openAI
+            || settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        else {
+            error.pointee = "Add an OpenAI API key in InplaceAI Preferences first." as NSString
+            return
+        }
+
+        Task { @MainActor in
+            AppState.shared.explainProvidedText(selectedText)
+        }
+    }
 }

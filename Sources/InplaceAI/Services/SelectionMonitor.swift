@@ -5,6 +5,15 @@ import Foundation
 @MainActor
 final class SelectionMonitor {
   private let systemWideElement = AXUIElementCreateSystemWide()
+  private let readableChildAttributes = [
+    kAXFocusedWindowAttribute,
+    kAXMainWindowAttribute,
+    kAXWindowsAttribute,
+    kAXChildrenAttribute,
+    kAXContentsAttribute,
+    kAXRowsAttribute,
+    kAXVisibleRowsAttribute
+  ]
 
   func captureSelection() throws -> TextSelection {
     guard AccessibilityAuthorizer.isTrusted else {
@@ -43,6 +52,68 @@ final class SelectionMonitor {
       selectedRange: selection.range,
       sourceBundleIdentifier: sourceBundleIdentifier
     )
+  }
+
+  func captureSelectionForReading() throws -> TextSelection {
+    guard AccessibilityAuthorizer.isTrusted else {
+      throw SelectionError.accessibilityDenied
+    }
+
+    let element = try? focusedElement()
+
+    for _ in 0..<3 {
+      if let element,
+        let selection = try captureSelectionViaClipboard(focusedElement: element),
+        selection.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+      {
+        let sourceBundleIdentifier = bundleIdentifier(for: element)
+        let frame = selection.range.flatMap { boundsForRange($0, in: element) } ?? frameForElement(element)
+        return TextSelection(
+          text: selection.text,
+          frame: frame,
+          element: element,
+          selectedRange: selection.range,
+          sourceBundleIdentifier: sourceBundleIdentifier
+        )
+      }
+
+      if let copied = try captureSelectionViaClipboard(focusedElement: element)?.text,
+        copied.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+      {
+        return TextSelection(
+          text: copied,
+          frame: nil,
+          element: element,
+          selectedRange: nil,
+          sourceBundleIdentifier: element.flatMap(bundleIdentifier(for:))
+        )
+      }
+
+      RunLoop.main.run(until: Date().addingTimeInterval(0.12))
+    }
+
+    if let element,
+      let selection = try selectedTextAndRange(for: element),
+      selection.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    {
+      let sourceBundleIdentifier = bundleIdentifier(for: element)
+      let frame = selection.range.flatMap { boundsForRange($0, in: element) } ?? frameForElement(element)
+      return TextSelection(
+        text: selection.text,
+        frame: frame,
+        element: element,
+        selectedRange: selection.range,
+        sourceBundleIdentifier: sourceBundleIdentifier
+      )
+    }
+
+    if let selection = selectedTextInFrontmostApplication(),
+      selection.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    {
+      return selection
+    }
+
+    throw SelectionError.unsupportedElement
   }
 
   func replaceSelection(
@@ -171,6 +242,64 @@ final class SelectionMonitor {
     return element as! AXUIElement
   }
 
+  private func selectedTextInFrontmostApplication() -> TextSelection? {
+    guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
+
+    let appElement = AXUIElementCreateApplication(app.processIdentifier)
+    let sourceBundleIdentifier = app.bundleIdentifier
+
+    if let selection = selectedTextAndFrameInDescendants(of: appElement, maxDepth: 8) {
+      return TextSelection(
+        text: selection.text,
+        frame: selection.frame,
+        element: selection.element,
+        selectedRange: selection.range,
+        sourceBundleIdentifier: sourceBundleIdentifier
+      )
+    }
+
+    return nil
+  }
+
+  private func selectedTextAndFrameInDescendants(
+    of element: AXUIElement,
+    maxDepth: Int
+  ) -> (text: String, frame: CGRect?, element: AXUIElement, range: CFRange?)? {
+    if let selection = try? selectedTextAndRange(for: element),
+      selection.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    {
+      let frame = selection.range.flatMap { boundsForRange($0, in: element) } ?? frameForElement(element)
+      return (selection.text, frame, element, selection.range)
+    }
+
+    guard maxDepth > 0 else { return nil }
+
+    for attribute in readableChildAttributes {
+      var value: AnyObject?
+      let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+      guard result == .success, let value else { continue }
+
+      if CFGetTypeID(value) == AXUIElementGetTypeID(),
+        let selection = selectedTextAndFrameInDescendants(
+          of: value as! AXUIElement,
+          maxDepth: maxDepth - 1
+        )
+      {
+        return selection
+      }
+
+      if let children = value as? [AXUIElement] {
+        for child in children.prefix(80) {
+          if let selection = selectedTextAndFrameInDescendants(of: child, maxDepth: maxDepth - 1) {
+            return selection
+          }
+        }
+      }
+    }
+
+    return nil
+  }
+
   private func selectedTextAndRange(for element: AXUIElement) throws -> (
     text: String, range: CFRange?
   )? {
@@ -295,28 +424,39 @@ final class SelectionMonitor {
     return false
   }
 
-  private func captureSelectionViaClipboard(focusedElement: AXUIElement) throws -> (
+  private func captureSelectionViaClipboard(focusedElement: AXUIElement?) throws -> (
     text: String, range: CFRange?
   )? {
     let pasteboard = NSPasteboard.general
     let existingItems = copyPasteboardItems(from: pasteboard)
+    let previousChangeCount = pasteboard.changeCount
 
     pasteboard.clearContents()
     CGSynthesizeCommandC()
 
-    // Yield to the main run loop so the synthetic Cmd+C propagates.
-    for _ in 0..<3 {
-      RunLoop.main.run(until: Date().addingTimeInterval(0.066))
-    }
+    // PDF and browser apps can take a beat to publish copied selection text.
+    let deadline = Date().addingTimeInterval(0.8)
+    var copied: String?
+    repeat {
+      RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+      copied = pasteboard.string(forType: .string)
+      if pasteboard.changeCount != previousChangeCount,
+        copied?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+      {
+        break
+      }
+    } while Date() < deadline
 
-    guard let copied = pasteboard.string(forType: .string) else {
+    guard let copied,
+      copied.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    else {
       restorePasteboard(pasteboard, items: existingItems)
       return nil
     }
 
     restorePasteboard(pasteboard, items: existingItems)
 
-    return (copied, selectedTextRange(for: focusedElement))
+    return (copied, focusedElement.flatMap { selectedTextRange(for: $0) })
   }
 
   private func setSelectedTextAttribute(on element: AXUIElement, text: String) -> Bool {
