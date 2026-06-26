@@ -9,6 +9,7 @@ enum WritingTool: String, CaseIterable, Identifiable {
   case summary
   case keyPoints
   case list
+  case translate
   case custom
 
   var id: String { rawValue }
@@ -23,6 +24,7 @@ enum WritingTool: String, CaseIterable, Identifiable {
     case .summary: return "Summary"
     case .keyPoints: return "Key Points"
     case .list: return "List"
+    case .translate: return "Translate"
     case .custom: return "Custom"
     }
   }
@@ -37,6 +39,7 @@ enum WritingTool: String, CaseIterable, Identifiable {
     case .summary: return "doc.text.magnifyingglass"
     case .keyPoints: return "list.bullet.rectangle"
     case .list: return "list.bullet"
+    case .translate: return "globe"
     case .custom: return "slider.horizontal.3"
     }
   }
@@ -47,7 +50,7 @@ enum WritingTool: String, CaseIterable, Identifiable {
       return "Review"
     case .friendly, .professional, .concise:
       return "Tone"
-    case .summary, .keyPoints, .list:
+    case .summary, .keyPoints, .list, .translate:
       return "Transform"
     case .custom:
       return "Saved"
@@ -72,6 +75,8 @@ enum WritingTool: String, CaseIterable, Identifiable {
       return "Convert the selected text into concise key points. Use plain text bullets. Return only the key points."
     case .list:
       return "Convert the selected text into a clean, readable plain text list. Preserve the important information. Return only the list."
+    case .translate:
+      return "Translate the selected text into the specified target language. If no target language is specified, translate to English. Detect and preserve the source language's meaning, tone, and nuance. Return only the translated text."
     case .custom:
       return customInstruction
     }
