@@ -118,8 +118,8 @@ struct PreferencesView: View {
             .padding(24)
             .frame(maxWidth: 760, alignment: .leading)
         }
-        .background(Color(NSColor.controlBackgroundColor).opacity(0.35))
         .padding()
+        .background(Color(NSColor.controlBackgroundColor).opacity(0.35))
         .onReceive(appState.$apiKey) { updated in
             if updated != apiKeyDraft {
                 apiKeyDraft = updated
