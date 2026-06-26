@@ -24,7 +24,8 @@ final class PreferencesController: NSObject, NSWindowDelegate {
         let window = NSWindow(contentViewController: hostingController)
         window.title = "InplaceAI Preferences"
         window.styleMask = [.titled, .closable, .miniaturizable]
-        window.setContentSize(NSSize(width: 460, height: 520))
+        window.setContentSize(NSSize(width: 720, height: 640))
+        window.minSize = NSSize(width: 640, height: 560)
         window.center()
         window.isReleasedWhenClosed = false
         window.delegate = self

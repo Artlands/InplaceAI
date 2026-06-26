@@ -6,13 +6,13 @@ InplaceAI is a macOS menu bar assistant that brings Writing Tools-style edits to
 - **System-wide**: works in any text field that exposes accessibility text (Mail, Notes, Outlook, etc.).
 - **Writing Tools panel**: choose Proofread, Rewrite, tone changes, summaries, key points, lists, translation, or your saved custom prompt without switching apps.
 - **Explanation popup**: explain selected text in a read-only floating popup, useful for PDFs, webpages, and other non-editing contexts.
-- **Configurable AI**: paste your OpenAI key once (stored locally in the app’s preferences), pick a model, and fine-tune the rewrite instruction.
-- **Privacy-aware**: only the raw selection is sent to OpenAI—nothing is masked or pre-processed—so you can see exactly what leaves your machine.
+- **Configurable AI**: paste your API key once (stored locally in the app’s preferences), pick your provider and model, and fine-tune the rewrite instruction.
+- **Privacy-aware**: only the raw selection is sent to your configured provider—nothing is masked or pre-processed—so you can see exactly what leaves your machine.
 
 ## Requirements
 - macOS 13 Ventura or newer.
 - Xcode command-line tools or Xcode 15+.
-- An OpenAI API key with access to the chosen model.
+- An API key for your chosen provider (required for OpenAI; optional for custom/local endpoints).
 - Accessibility permission for InplaceAI (System Settings ▸ Privacy & Security ▸ Accessibility).
 
 ## Getting Started
@@ -23,8 +23,8 @@ swift build   # or open with `xed .` / Xcode
 swift run
 ```
 
-The first launch prompts for Accessibility permission. Add your API key and model under **Preferences** (Status bar ▸ Preferences…). The default prompt rewrites text with better grammar while preserving intent—tweak it to match your tone.
-Use a currently supported OpenAI chat model (default: `gpt-5-nano`); suggested options include `gpt-5-mini`, `gpt-5.1`, `gpt-4.1-mini`, and `gpt-4.1`, or any other available chat/completions model.
+The first launch prompts for Accessibility permission. Select your provider, add your API key, and choose a model under **Preferences** (Status bar ▸ Preferences…). The default prompt rewrites text with better grammar while preserving intent—tweak it to match your tone.
+Use a currently supported chat model (default: `gpt-5-nano`); suggested options include `gpt-5-mini`, `gpt-5.1`, `gpt-4.1-mini`, and `gpt-4.1`, or any other available chat/completions model.
 
 ### Local/custom endpoints
 - In Preferences, set Provider to **Custom** (OpenAI-compatible URL) or **Local (Ollama/LM Studio)**; update base URL/model as needed.
