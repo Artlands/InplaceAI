@@ -4,7 +4,7 @@ InplaceAI is a macOS menu bar assistant that brings Writing Tools-style edits to
 
 ## Highlights
 - **System-wide**: works in any text field that exposes accessibility text (Mail, Notes, Outlook, etc.).
-- **Writing Tools panel**: choose Proofread, Rewrite, tone changes, summaries, key points, lists, or your saved custom prompt without switching apps.
+- **Writing Tools panel**: choose Proofread, Rewrite, tone changes, summaries, key points, lists, translation, or your saved custom prompt without switching apps.
 - **Explanation popup**: explain selected text in a read-only floating popup, useful for PDFs, webpages, and other non-editing contexts.
 - **Configurable AI**: paste your OpenAI key once (stored locally in the app’s preferences), pick a model, and fine-tune the rewrite instruction.
 - **Privacy-aware**: only the raw selection is sent to OpenAI—nothing is masked or pre-processed—so you can see exactly what leaves your machine.

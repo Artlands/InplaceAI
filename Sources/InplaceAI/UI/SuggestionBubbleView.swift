@@ -10,7 +10,7 @@ struct SuggestionBubbleView: View {
   private let minBubbleWidth: CGFloat = 440
   private let maxBubbleWidth: CGFloat = 560
   private let maxContentHeight: CGFloat = 220
-  private let primaryTools: [WritingTool] = [.proofread, .rewrite, .friendly, .professional, .concise]
+  private let primaryTools: [WritingTool] = [.proofread, .rewrite, .friendly, .professional, .concise, .translate]
   private let secondaryTools: [WritingTool] = [.summary, .keyPoints, .list, .custom]
 
   @State private var editedText: String
