@@ -180,8 +180,8 @@ struct PreferencesView: View {
                         .disabled(appState.provider == .openAI)
                 }
 
-                HStack(alignment: .top, spacing: 12) {
-                    FieldGroup(title: "Model", help: "Choose a listed model or type an exact model name below.") {
+                FieldGroup(title: "Model", help: "Choose a listed model or type an exact model name below.") {
+                    HStack(spacing: 12) {
                         Picker("Model", selection: $appState.model) {
                             ForEach(modelOptions, id: \.self) { model in
                                 Text(model).tag(model)
@@ -191,24 +191,23 @@ struct PreferencesView: View {
                         }
                         .labelsHidden()
                         .frame(maxWidth: .infinity)
-                    }
 
-                    Button {
-                        appState.refreshModels()
-                    } label: {
-                        if appState.isFetchingModels {
-                            ProgressView()
-                                .controlSize(.small)
-                                .frame(width: 18, height: 18)
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                                .frame(width: 18, height: 18)
+                        Button {
+                            appState.refreshModels()
+                        } label: {
+                            if appState.isFetchingModels {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .frame(width: 18, height: 18)
+                            } else {
+                                Image(systemName: "arrow.clockwise")
+                                    .frame(width: 18, height: 18)
+                            }
                         }
+                        .buttonStyle(.bordered)
+                        .disabled(appState.isFetchingModels)
+                        .help("Fetch the latest model list from the endpoint")
                     }
-                    .buttonStyle(.bordered)
-                    .disabled(appState.isFetchingModels)
-                    .help("Fetch the latest model list from the endpoint")
-                    .padding(.top, 23)
                 }
 
                 TextField("Or type a model name", text: $appState.model)
