@@ -4,7 +4,7 @@ InplaceAI is a macOS menu bar assistant that brings Writing Tools-style edits to
 
 ## Highlights
 - **System-wide**: works in any text field that exposes accessibility text (Mail, Notes, Outlook, etc.).
-- **Writing Tools panel**: choose Proofread, Rewrite, tone changes, summaries, key points, lists, translation, or your saved custom prompt without switching apps.
+- **Writing Tools panel**: choose Proofread, Rewrite, tone changes, summaries, key points, lists, translation, or your saved custom prompt without switching apps. Translation uses a configurable language pair that defaults to English and Chinese.
 - **Explanation popup**: explain selected text in a read-only floating popup, useful for PDFs, webpages, and other non-editing contexts.
 - **Configurable AI**: paste your API key once (stored locally in the app’s preferences), pick your provider and model, and fine-tune the rewrite instruction.
 - **Privacy-aware**: only the raw selection is sent to your configured provider—nothing is masked or pre-processed—so you can see exactly what leaves your machine.
@@ -23,7 +23,7 @@ swift build   # or open with `xed .` / Xcode
 swift run
 ```
 
-The first launch prompts for Accessibility permission. Select your provider, add your API key, and choose a model under **Preferences** (Status bar ▸ Preferences…). The default prompt rewrites text with better grammar while preserving intent—tweak it to match your tone.
+The first launch prompts for Accessibility permission. Select your provider, add your API key, choose a model, and set your translation language pair under **Preferences** (Status bar ▸ Preferences…). The default prompt rewrites text with better grammar while preserving intent—tweak it to match your tone.
 Use a currently supported chat model (default: `gpt-5-nano`); suggested options include `gpt-5-mini`, `gpt-5.1`, `gpt-4.1-mini`, and `gpt-4.1`, or any other available chat/completions model.
 
 ### Local/custom endpoints

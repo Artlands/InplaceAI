@@ -57,7 +57,11 @@ enum WritingTool: String, CaseIterable, Identifiable {
     }
   }
 
-  func instruction(customInstruction: String) -> String {
+  func instruction(
+    customInstruction: String,
+    primaryTranslationLanguage: TranslationLanguage = .english,
+    secondaryTranslationLanguage: TranslationLanguage = .chinese
+  ) -> String {
     switch self {
     case .proofread:
       return "Correct grammar, spelling, punctuation, and obvious wording issues in the selected text. Preserve the author's meaning, tone, formatting, and line breaks as much as possible. Return only the corrected text."
@@ -76,7 +80,13 @@ enum WritingTool: String, CaseIterable, Identifiable {
     case .list:
       return "Convert the selected text into a clean, readable plain text list. Preserve the important information. Return only the list."
     case .translate:
-      return "Translate the selected text into the specified target language. If no target language is specified, translate to English. Detect and preserve the source language's meaning, tone, and nuance. Return only the translated text."
+      return """
+        Translate the selected text between \(primaryTranslationLanguage.displayName) and \(secondaryTranslationLanguage.displayName). \
+        If the text is primarily \(primaryTranslationLanguage.displayName), translate it to \(secondaryTranslationLanguage.displayName). \
+        If it is primarily \(secondaryTranslationLanguage.displayName), translate it to \(primaryTranslationLanguage.displayName). \
+        If it is primarily another language, translate it to \(secondaryTranslationLanguage.displayName). \
+        Preserve the source text's meaning, tone, nuance, formatting, and line breaks as much as possible. Return only the translated text.
+        """
     case .custom:
       return customInstruction
     }

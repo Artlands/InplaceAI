@@ -112,6 +112,7 @@ struct PreferencesView: View {
                 hero
                 providerSection
                 promptSection
+                translationSection
                 securitySection
                 systemSection
             }
@@ -285,6 +286,42 @@ struct PreferencesView: View {
         }
     }
 
+    private var translationSection: some View {
+        SettingsCard(title: "Translation", symbolName: "character.book.closed") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Translate automatically in either direction between this language pair.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                HStack(spacing: 12) {
+                    languagePicker(
+                        "Primary language",
+                        selection: $appState.primaryTranslationLanguage,
+                        excluding: appState.secondaryTranslationLanguage
+                    )
+
+                    Button {
+                        swap(
+                            &appState.primaryTranslationLanguage,
+                            &appState.secondaryTranslationLanguage
+                        )
+                    } label: {
+                        Image(systemName: "arrow.left.arrow.right")
+                            .frame(width: 18, height: 18)
+                    }
+                    .buttonStyle(.bordered)
+                    .help("Swap translation languages")
+
+                    languagePicker(
+                        "Secondary language",
+                        selection: $appState.secondaryTranslationLanguage,
+                        excluding: appState.primaryTranslationLanguage
+                    )
+                }
+            }
+        }
+    }
+
     private var systemSection: some View {
         SettingsCard(title: "System", symbolName: "gearshape") {
             VStack(spacing: 12) {
@@ -311,6 +348,19 @@ struct PreferencesView: View {
         guard presetID != PromptLibrary.customPresetID else { return }
         guard let preset = PromptLibrary.presets.first(where: { $0.id == presetID }) else { return }
         appState.instruction = preset.text
+    }
+
+    private func languagePicker(
+        _ title: String,
+        selection: Binding<TranslationLanguage>,
+        excluding excludedLanguage: TranslationLanguage
+    ) -> some View {
+        Picker(title, selection: selection) {
+            ForEach(TranslationLanguage.allCases.filter { $0 != excludedLanguage }) { language in
+                Text(language.displayName).tag(language)
+            }
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 
