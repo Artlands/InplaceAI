@@ -11,23 +11,23 @@ struct ExplanationBubbleView: View {
   private let maxContentHeight: CGFloat = 260
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 10) {
+    VStack(alignment: .leading, spacing: 12) {
       header
       explanationBody
       originalPreview
       footer
     }
-    .padding(12)
+    .padding(14)
     .frame(minWidth: minBubbleWidth, idealWidth: 500, maxWidth: maxBubbleWidth, alignment: .leading)
     .background(
       RoundedRectangle(cornerRadius: 10, style: .continuous)
-        .fill(Color(NSColor.windowBackgroundColor))
+        .fill(.regularMaterial)
     )
     .overlay(
       RoundedRectangle(cornerRadius: 10, style: .continuous)
-        .stroke(Color.secondary.opacity(0.14), lineWidth: 1)
+        .stroke(Color.white.opacity(0.22), lineWidth: 1)
     )
-    .shadow(color: Color.black.opacity(0.16), radius: 16, x: 0, y: 8)
+    .shadow(color: Color.black.opacity(0.18), radius: 22, x: 0, y: 12)
   }
 
   private var header: some View {
@@ -47,6 +47,7 @@ struct ExplanationBubbleView: View {
       }
       .buttonStyle(.plain)
       .foregroundColor(.secondary)
+      .background(Color.secondary.opacity(0.08), in: Circle())
       .help("Dismiss")
       .keyboardShortcut(.cancelAction)
     }
@@ -84,7 +85,7 @@ struct ExplanationBubbleView: View {
     }
     .padding(.horizontal, 9)
     .padding(.vertical, 7)
-    .background(Color(NSColor.controlBackgroundColor).opacity(0.65))
+    .background(Color(NSColor.controlBackgroundColor).opacity(0.78))
     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
   }
 

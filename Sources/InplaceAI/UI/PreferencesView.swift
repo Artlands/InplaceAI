@@ -107,114 +107,18 @@ struct PreferencesView: View {
     }
 
     var body: some View {
-        Form {
-            Section("Provider & Model") {
-                Picker("Provider", selection: $appState.provider) {
-                    ForEach(ModelProvider.allCases) { provider in
-                        Text(provider.displayName).tag(provider)
-                    }
-                }
-
-                TextField("Base URL", text: $appState.baseURL)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(.body, design: .monospaced))
-                    .disableAutocorrection(true)
-                    .disabled(appState.provider == .openAI)
-                Text(baseURLHelpText)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-
-                HStack {
-                    Picker("Model", selection: $appState.model) {
-                        ForEach(modelOptions, id: \.self) { model in
-                            Text(model).tag(model)
-                        }
-                        Divider()
-                        Text("Custom…").tag("__custom__")
-                    }
-                    .frame(maxWidth: .infinity)
-
-                    if appState.isFetchingModels {
-                        ProgressView()
-                            .controlSize(.small)
-                            .scaleEffect(0.7)
-                    } else {
-                        Button("Refresh") {
-                            appState.refreshModels()
-                        }
-                        .buttonStyle(.borderless)
-                        .help("Fetch the latest model list from the endpoint")
-                    }
-                }
-
-                TextField("Or type a model name", text: $appState.model)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(.body, design: .monospaced))
-                    .disableAutocorrection(true)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                hero
+                providerSection
+                promptSection
+                securitySection
+                systemSection
             }
-
-            Section("API Key") {
-                Toggle("Show API Key", isOn: $showAPI.animation())
-                if showAPI {
-                    TextField("sk-...", text: $apiKeyDraft)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(.body, design: .monospaced))
-                } else {
-                    SecureField("sk-...", text: $apiKeyDraft)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(.body, design: .monospaced))
-                }
-                HStack {
-                    Button(appState.apiKey == apiKeyDraft ? "Saved" : "Save API Key") {
-                        appState.updateAPIKey(apiKeyDraft)
-                    }
-                    .disabled(appState.apiKey == apiKeyDraft)
-                    if appState.apiKey != apiKeyDraft {
-                        Text("Press save after editing.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                Text(apiKeyHelpText)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-
-            Section("Prompt") {
-                Picker("Preset", selection: $selectedPresetID) {
-                    ForEach(PromptLibrary.presets) { preset in
-                        Text(preset.title).tag(preset.id)
-                    }
-                    Text("Custom").tag(PromptLibrary.customPresetID)
-                }
-                .onChange(of: selectedPresetID) { newID in
-                    applyPresetIfNeeded(newID)
-                }
-                .pickerStyle(.menu)
-
-                TextEditor(text: $appState.instruction)
-                    .font(.system(.body, design: .monospaced))
-                    .frame(height: 120)
-                    .onChange(of: appState.instruction) { newValue in
-                        selectedPresetID = PromptLibrary.presetID(for: newValue)
-                    }
-                Text("Choose a preset or customize your own rewrite instruction. The prompt is saved automatically.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-
-            Section("System Access") {
-                Label(appState.accessibilityTrusted ? "Accessibility granted" : "Grant accessibility",
-                      systemImage: appState.accessibilityTrusted ? "checkmark.shield" : "exclamationmark.shield")
-                Button("Request Permission") {
-                    appState.requestAccessibilityPermission()
-                }
-            }
-
-            Section("Startup") {
-                Toggle("Start at login", isOn: $appState.startAtLogin.animation())
-            }
+            .padding(24)
+            .frame(maxWidth: 760, alignment: .leading)
         }
+        .background(Color(NSColor.controlBackgroundColor).opacity(0.35))
         .padding()
         .onReceive(appState.$apiKey) { updated in
             if updated != apiKeyDraft {
@@ -226,9 +130,227 @@ struct PreferencesView: View {
         }
     }
 
+    private var hero: some View {
+        HStack(alignment: .center, spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.16))
+                Image(systemName: "sparkles")
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundColor(.accentColor)
+            }
+            .frame(width: 52, height: 52)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("InplaceAI")
+                    .font(.system(size: 28, weight: .semibold))
+                Text("Configure the provider, prompt, and system access for inline writing help.")
+                    .font(.callout)
+                    .foregroundColor(.secondary)
+            }
+            Spacer()
+            providerBadge
+        }
+    }
+
+    private var providerBadge: some View {
+        Label(appState.provider.displayName, systemImage: "network")
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, 10)
+            .frame(height: 28)
+            .background(Color(NSColor.windowBackgroundColor), in: Capsule())
+            .overlay(Capsule().stroke(Color.secondary.opacity(0.14), lineWidth: 1))
+    }
+
+    private var providerSection: some View {
+        SettingsCard(title: "Provider & Model", symbolName: "cpu") {
+            VStack(alignment: .leading, spacing: 14) {
+                Picker("Provider", selection: $appState.provider) {
+                    ForEach(ModelProvider.allCases) { provider in
+                        Text(provider.displayName).tag(provider)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                FieldGroup(title: "Base URL", help: baseURLHelpText) {
+                    TextField("https://api.openai.com/v1", text: $appState.baseURL)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(.body, design: .monospaced))
+                        .disableAutocorrection(true)
+                        .disabled(appState.provider == .openAI)
+                }
+
+                HStack(alignment: .top, spacing: 12) {
+                    FieldGroup(title: "Model", help: "Choose a listed model or type an exact model name below.") {
+                        Picker("Model", selection: $appState.model) {
+                            ForEach(modelOptions, id: \.self) { model in
+                                Text(model).tag(model)
+                            }
+                            Divider()
+                            Text("Custom...").tag("__custom__")
+                        }
+                        .labelsHidden()
+                        .frame(maxWidth: .infinity)
+                    }
+
+                    Button {
+                        appState.refreshModels()
+                    } label: {
+                        if appState.isFetchingModels {
+                            ProgressView()
+                                .controlSize(.small)
+                                .frame(width: 18, height: 18)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .frame(width: 18, height: 18)
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(appState.isFetchingModels)
+                    .help("Fetch the latest model list from the endpoint")
+                    .padding(.top, 23)
+                }
+
+                TextField("Or type a model name", text: $appState.model)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(.body, design: .monospaced))
+                    .disableAutocorrection(true)
+            }
+        }
+    }
+
+    private var promptSection: some View {
+        SettingsCard(title: "Prompt", symbolName: "text.badge.checkmark") {
+            VStack(alignment: .leading, spacing: 12) {
+                FieldGroup(title: "Preset", help: "Choose a preset or customize your own rewrite instruction. The prompt is saved automatically.") {
+                    Picker("Preset", selection: $selectedPresetID) {
+                        ForEach(PromptLibrary.presets) { preset in
+                            Text(preset.title).tag(preset.id)
+                        }
+                        Text("Custom").tag(PromptLibrary.customPresetID)
+                    }
+                    .onChange(of: selectedPresetID) { newID in
+                        applyPresetIfNeeded(newID)
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                }
+
+                TextEditor(text: $appState.instruction)
+                    .font(.system(.body, design: .monospaced))
+                    .lineSpacing(2)
+                    .frame(height: 132)
+                    .scrollContentBackground(.hidden)
+                    .padding(8)
+                    .background(Color(NSColor.textBackgroundColor), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(Color.secondary.opacity(0.16), lineWidth: 1)
+                    )
+                    .onChange(of: appState.instruction) { newValue in
+                        selectedPresetID = PromptLibrary.presetID(for: newValue)
+                    }
+            }
+        }
+    }
+
+    private var securitySection: some View {
+        SettingsCard(title: "API Key", symbolName: "key") {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Toggle("Show API Key", isOn: $showAPI.animation())
+                    Spacer()
+                    Button {
+                        appState.updateAPIKey(apiKeyDraft)
+                    } label: {
+                        Label(appState.apiKey == apiKeyDraft ? "Saved" : "Save", systemImage: appState.apiKey == apiKeyDraft ? "checkmark" : "square.and.arrow.down")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(appState.apiKey == apiKeyDraft)
+                }
+
+                Group {
+                    if showAPI {
+                        TextField("sk-...", text: $apiKeyDraft)
+                    } else {
+                        SecureField("sk-...", text: $apiKeyDraft)
+                    }
+                }
+                .textFieldStyle(.roundedBorder)
+                .font(.system(.body, design: .monospaced))
+
+                Text(apiKeyHelpText)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+
+    private var systemSection: some View {
+        SettingsCard(title: "System", symbolName: "gearshape") {
+            VStack(spacing: 12) {
+                HStack(spacing: 12) {
+                    Label(
+                        appState.accessibilityTrusted ? "Accessibility granted" : "Accessibility required",
+                        systemImage: appState.accessibilityTrusted ? "checkmark.shield" : "exclamationmark.shield"
+                    )
+                    .foregroundColor(appState.accessibilityTrusted ? .green : .orange)
+                    Spacer()
+                    Button("Request Permission") {
+                        appState.requestAccessibilityPermission()
+                    }
+                }
+
+                Divider()
+
+                Toggle("Start at login", isOn: $appState.startAtLogin.animation())
+            }
+        }
+    }
+
     private func applyPresetIfNeeded(_ presetID: String) {
         guard presetID != PromptLibrary.customPresetID else { return }
         guard let preset = PromptLibrary.presets.first(where: { $0.id == presetID }) else { return }
         appState.instruction = preset.text
+    }
+}
+
+private struct SettingsCard<Content: View>: View {
+    let title: String
+    let symbolName: String
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Label(title, systemImage: symbolName)
+                .font(.headline)
+                .foregroundColor(.primary)
+            content
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.secondary.opacity(0.14), lineWidth: 1)
+        )
+    }
+}
+
+private struct FieldGroup<Content: View>: View {
+    let title: String
+    let help: String
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundColor(.secondary)
+            content
+            Text(help)
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
     }
 }
