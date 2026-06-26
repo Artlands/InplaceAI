@@ -25,7 +25,7 @@ struct ExplanationBubbleView: View {
     )
     .overlay(
       RoundedRectangle(cornerRadius: 10, style: .continuous)
-        .stroke(Color.white.opacity(0.22), lineWidth: 1)
+        .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
     )
     .shadow(color: Color.black.opacity(0.18), radius: 22, x: 0, y: 12)
   }
