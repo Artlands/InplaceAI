@@ -5,8 +5,31 @@ struct AppSettings {
     var baseURL: String
     var model: String
     var instruction: String
+    var primaryTranslationLanguage: TranslationLanguage
+    var secondaryTranslationLanguage: TranslationLanguage
     var apiKey: String
     var startAtLogin: Bool
+}
+
+enum TranslationLanguage: String, CaseIterable, Identifiable {
+    case english
+    case chinese
+    case spanish
+    case french
+    case german
+    case japanese
+    case korean
+    case portuguese
+    case italian
+    case russian
+    case arabic
+    case hindi
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        rawValue.capitalized
+    }
 }
 
 enum ModelProvider: String, CaseIterable, Identifiable {
@@ -39,6 +62,8 @@ struct SettingsStore {
         static let baseURL = "settings.baseURL"
         static let model = "settings.model"
         static let instruction = "settings.instruction"
+        static let primaryTranslationLanguage = "settings.translation.primaryLanguage"
+        static let secondaryTranslationLanguage = "settings.translation.secondaryLanguage"
         static let apiKey = "settings.apiKey"
         static let startAtLogin = "settings.startAtLogin"
     }
@@ -71,6 +96,12 @@ struct SettingsStore {
         let model = dict?[Keys.model] ?? "gpt-5-nano"
         let instruction = dict?[Keys.instruction] ??
         "Rewrite the text with clearer grammar and tone while preserving the author's intent. Return only the revised text."
+        let primaryTranslationLanguage = TranslationLanguage(
+            rawValue: dict?[Keys.primaryTranslationLanguage] ?? ""
+        ) ?? .english
+        let secondaryTranslationLanguage = TranslationLanguage(
+            rawValue: dict?[Keys.secondaryTranslationLanguage] ?? ""
+        ) ?? .chinese
         let apiKey = dict?[Keys.apiKey] ?? ""
         let startAtLogin = dict?[Keys.startAtLogin] == "true"
         return AppSettings(
@@ -78,6 +109,8 @@ struct SettingsStore {
             baseURL: baseURL,
             model: model,
             instruction: instruction,
+            primaryTranslationLanguage: primaryTranslationLanguage,
+            secondaryTranslationLanguage: secondaryTranslationLanguage,
             apiKey: apiKey,
             startAtLogin: startAtLogin
         )
@@ -104,6 +137,18 @@ struct SettingsStore {
     func save(instruction: String) {
         var dict = loadDict() ?? [:]
         dict[Keys.instruction] = instruction
+        save(dict)
+    }
+
+    func save(primaryTranslationLanguage: TranslationLanguage) {
+        var dict = loadDict() ?? [:]
+        dict[Keys.primaryTranslationLanguage] = primaryTranslationLanguage.rawValue
+        save(dict)
+    }
+
+    func save(secondaryTranslationLanguage: TranslationLanguage) {
+        var dict = loadDict() ?? [:]
+        dict[Keys.secondaryTranslationLanguage] = secondaryTranslationLanguage.rawValue
         save(dict)
     }
 

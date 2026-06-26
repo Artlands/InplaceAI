@@ -15,6 +15,8 @@ final class AppState: ObservableObject {
   @Published var baseURL: String
   @Published var model: String
   @Published var instruction: String
+  @Published var primaryTranslationLanguage: TranslationLanguage
+  @Published var secondaryTranslationLanguage: TranslationLanguage
   @Published var startAtLogin: Bool
   @Published var isProcessing = false
   @Published var lastSelection: TextSelection?
@@ -45,6 +47,8 @@ final class AppState: ObservableObject {
     baseURL = settings.baseURL
     model = settings.model
     instruction = settings.instruction
+    primaryTranslationLanguage = settings.primaryTranslationLanguage
+    secondaryTranslationLanguage = settings.secondaryTranslationLanguage
     let savedStartAtLogin = settings.startAtLogin
     startAtLogin = launchController.isStartAtLogin() ? true : savedStartAtLogin
     apiKey = settings.apiKey
@@ -79,6 +83,16 @@ final class AppState: ObservableObject {
     $instruction
       .dropFirst()
       .sink { [weak self] in self?.settingsStore.save(instruction: $0) }
+      .store(in: &cancellables)
+
+    $primaryTranslationLanguage
+      .dropFirst()
+      .sink { [weak self] in self?.settingsStore.save(primaryTranslationLanguage: $0) }
+      .store(in: &cancellables)
+
+    $secondaryTranslationLanguage
+      .dropFirst()
+      .sink { [weak self] in self?.settingsStore.save(secondaryTranslationLanguage: $0) }
       .store(in: &cancellables)
 
     $startAtLogin
@@ -243,7 +257,11 @@ final class AppState: ObservableObject {
     isProcessing = true
     defer { isProcessing = false }
 
-    let toolInstruction = tool.instruction(customInstruction: instruction)
+    let toolInstruction = tool.instruction(
+      customInstruction: instruction,
+      primaryTranslationLanguage: primaryTranslationLanguage,
+      secondaryTranslationLanguage: secondaryTranslationLanguage
+    )
 
     do {
       // Show immediate progress bubble anchored to the captured selection.
