@@ -30,7 +30,11 @@ final class TextServiceProvider: NSObject {
             let tool = WritingTool.proofread
             let suggestion = try openAIService.rewriteSynchronously(
                 text: selectedText,
-                instruction: tool.instruction(customInstruction: settings.instruction),
+                instruction: tool.instruction(
+                    customInstruction: settings.instruction,
+                    primaryTranslationLanguage: settings.primaryTranslationLanguage,
+                    secondaryTranslationLanguage: settings.secondaryTranslationLanguage
+                ),
                 apiKey: settings.apiKey,
                 model: settings.model,
                 baseURL: settings.baseURL,

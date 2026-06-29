@@ -28,11 +28,11 @@ import Foundation
 @MainActor func CGSynthesizeCommandA() {
   guard let source = CGEventSource(stateID: .combinedSessionState) else { return }
 
-  let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 30, keyDown: true)  // A key (kVK_ANSI_A)
+  let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true)  // A key (kVK_ANSI_A = 0x00)
   keyDown?.flags = .maskCommand
   keyDown?.post(tap: .cghidEventTap)
 
-  let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 30, keyDown: false)
+  let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false)
   keyUp?.flags = .maskCommand
   keyUp?.post(tap: .cghidEventTap)
 }

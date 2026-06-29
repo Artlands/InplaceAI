@@ -40,10 +40,12 @@ final class AppState: ObservableObject {
   private let launchController = LaunchController()
   private var cancellables = Set<AnyCancellable>()
   private var accessibilityPollTask: Task<Void, Never>?
+  private var previousProvider: ModelProvider
 
   private init() {
     let settings = settingsStore.load()
     provider = settings.provider
+    previousProvider = settings.provider
     baseURL = settings.baseURL
     model = settings.model
     instruction = settings.instruction
@@ -158,11 +160,12 @@ final class AppState: ObservableObject {
   }
 
   private func maybeResetBaseURL(for provider: ModelProvider) {
-    // If user hasn't customized baseURL away from the previous provider default, update it to the new default.
-    let defaults = provider.defaultBaseURL
+    // Only swap the base URL when the current value is still the previous
+    // provider's default — never clobber a user-customized URL.
+    defer { previousProvider = provider }
     let trimmed = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-    if trimmed.isEmpty || trimmed == ModelProvider.openAI.defaultBaseURL || trimmed == ModelProvider.custom.defaultBaseURL || trimmed == ModelProvider.local.defaultBaseURL {
-      baseURL = defaults
+    if trimmed.isEmpty || trimmed == previousProvider.defaultBaseURL {
+      baseURL = provider.defaultBaseURL
     }
   }
 

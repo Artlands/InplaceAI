@@ -28,12 +28,11 @@ struct OpenAIService {
         let (data, response) = try await session.data(for: request)
 
         guard let http = response as? HTTPURLResponse else {
-            throw NSError(domain: "network", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid response"])
+            throw ServiceError.invalidResponse
         }
 
         guard 200..<300 ~= http.statusCode else {
-            let message = String(decoding: data, as: UTF8.self)
-            throw NSError(domain: "network", code: http.statusCode, userInfo: [NSLocalizedDescriptionKey: message])
+            throw ServiceError.http(statusCode: http.statusCode, body: errorBody(from: data))
         }
 
         let rewritten = try decodeRewrittenText(from: data)
@@ -101,7 +100,7 @@ struct OpenAIService {
         }
 
         guard 200..<300 ~= http.statusCode else {
-            throw ServiceError.http(statusCode: http.statusCode, body: String(decoding: data, as: UTF8.self))
+            throw ServiceError.http(statusCode: http.statusCode, body: errorBody(from: data))
         }
 
         let rewritten = try decodeRewrittenText(from: data)
@@ -157,6 +156,19 @@ struct OpenAIService {
 
         request.httpBody = try JSONEncoder().encode(payload)
         return request
+    }
+
+    /// Best-effort decoding of an error response body. Truncates long bodies and
+    /// drops invalid UTF-8 so a malformed upstream response can't bloat or
+    /// scramble the alert that surfaces it.
+    private func errorBody(from data: Data) -> String {
+        let raw = String(data: data, encoding: .utf8) ?? ""
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let limit = 600
+        if trimmed.count > limit {
+            return String(trimmed.prefix(limit)) + "…"
+        }
+        return trimmed
     }
 
     private func decodeRewrittenText(from data: Data) throws -> String {

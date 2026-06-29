@@ -68,7 +68,11 @@ struct SettingsStore {
         static let startAtLogin = "settings.startAtLogin"
     }
 
+    private static let keychainService = "com.inplaceai.desktop"
+    private static let keychainAPIKeyAccount = "openai.apiKey"
+
     private let settingsFile: URL
+    private let keychain: KeychainStore
 
     init() {
         let directory = FileManager.default.urls(
@@ -79,6 +83,10 @@ struct SettingsStore {
         let dir = directory.appendingPathComponent(bundle, isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         self.settingsFile = dir.appendingPathComponent("settings.json")
+        self.keychain = KeychainStore(
+            service: Self.keychainService,
+            account: Self.keychainAPIKeyAccount
+        )
     }
 
     private func loadDict() -> [String: String]? {
@@ -102,7 +110,7 @@ struct SettingsStore {
         let secondaryTranslationLanguage = TranslationLanguage(
             rawValue: dict?[Keys.secondaryTranslationLanguage] ?? ""
         ) ?? .chinese
-        let apiKey = dict?[Keys.apiKey] ?? ""
+        let apiKey = loadAPIKey(migratingFrom: dict)
         let startAtLogin = dict?[Keys.startAtLogin] == "true"
         return AppSettings(
             provider: provider,
@@ -114,6 +122,32 @@ struct SettingsStore {
             apiKey: apiKey,
             startAtLogin: startAtLogin
         )
+    }
+
+    /// Reads the API key from the Keychain. If a legacy plaintext value exists in
+    /// settings.json, migrates it into the Keychain and scrubs it from disk.
+    private func loadAPIKey(migratingFrom dict: [String: String]?) -> String {
+        if let keychainKey = keychain.read(), !keychainKey.isEmpty {
+            if dict?[Keys.apiKey] != nil {
+                scrubLegacyAPIKey()
+            }
+            return keychainKey
+        }
+
+        if let legacy = dict?[Keys.apiKey], !legacy.isEmpty {
+            keychain.write(legacy)
+            scrubLegacyAPIKey()
+            return legacy
+        }
+
+        return ""
+    }
+
+    private func scrubLegacyAPIKey() {
+        guard var dict = loadDict() else { return }
+        if dict.removeValue(forKey: Keys.apiKey) != nil {
+            save(dict)
+        }
     }
 
     func save(provider: ModelProvider) {
@@ -153,9 +187,12 @@ struct SettingsStore {
     }
 
     func save(apiKey: String) {
-        var dict = loadDict() ?? [:]
-        dict[Keys.apiKey] = apiKey
-        save(dict)
+        if apiKey.isEmpty {
+            keychain.delete()
+        } else {
+            keychain.write(apiKey)
+        }
+        scrubLegacyAPIKey()
     }
 
     func save(startAtLogin: Bool) {

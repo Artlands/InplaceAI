@@ -31,7 +31,7 @@ final class HotkeyController {
 
     private func registerHotkeys() {
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-        InstallEventHandler(
+        let handlerStatus = InstallEventHandler(
             GetEventDispatcherTarget(),
             hotKeyEventHandler,
             1,
@@ -39,24 +39,34 @@ final class HotkeyController {
             UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque()),
             &eventHandler
         )
+        if handlerStatus != noErr {
+            NSLog("InplaceAI: failed to install hotkey event handler (OSStatus \(handlerStatus)) — global shortcuts will not fire.")
+            return
+        }
 
         let modifiers = UInt32(optionKey | shiftKey)
-        RegisterEventHotKey(
-            UInt32(15), // R key
+        let rewriteStatus = RegisterEventHotKey(
+            UInt32(15), // R key (kVK_ANSI_R)
             modifiers,
             Hotkey.rewrite.eventID,
             GetEventDispatcherTarget(),
             0,
             &rewriteHotKeyRef
         )
-        RegisterEventHotKey(
-            UInt32(7), // X key
+        if rewriteStatus != noErr {
+            NSLog("InplaceAI: failed to register ⌥⇧R hotkey (OSStatus \(rewriteStatus)). Another app may own it.")
+        }
+        let explainStatus = RegisterEventHotKey(
+            UInt32(7), // X key (kVK_ANSI_X)
             modifiers,
             Hotkey.explain.eventID,
             GetEventDispatcherTarget(),
             0,
             &explainHotKeyRef
         )
+        if explainStatus != noErr {
+            NSLog("InplaceAI: failed to register ⌥⇧X hotkey (OSStatus \(explainStatus)). Another app may own it.")
+        }
     }
 
     private func unregisterHotkeys() {
