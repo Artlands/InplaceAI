@@ -12,6 +12,7 @@ final class StatusBarController {
     private lazy var startAtLoginItem: NSMenuItem = {
         let item = NSMenuItem(title: "Start at login", action: #selector(toggleStartAtLogin), keyEquivalent: "")
         item.keyEquivalentModifierMask = []
+        item.target = self
         return item
     }()
 
@@ -26,6 +27,7 @@ final class StatusBarController {
     private func configureStatusItem() {
         guard let button = statusItem.button else { return }
         button.image = loadStatusIcon()
+        button.toolTip = "InplaceAI — select text, then press ⌥⇧R"
         button.imagePosition = .imageOnly
         button.imageScaling = .scaleProportionallyUpOrDown
 
@@ -187,8 +189,24 @@ final class StatusBarController {
         panel.messageText = "InplaceAI"
         panel.informativeText = alert.message
         panel.alertStyle = .warning
-        panel.addButton(withTitle: "OK")
-        panel.runModal()
+        switch alert {
+        case .missingAPIKey:
+            panel.addButton(withTitle: "Open Preferences")
+            panel.addButton(withTitle: "Cancel")
+        case .accessibilityDenied:
+            panel.addButton(withTitle: "Open System Settings")
+            panel.addButton(withTitle: "Cancel")
+        default:
+            panel.addButton(withTitle: "OK")
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        if panel.runModal() == .alertFirstButtonReturn {
+            switch alert {
+            case .missingAPIKey: preferencesController?.show()
+            case .accessibilityDenied: appState.requestAccessibilityPermission()
+            default: break
+            }
+        }
         appState.alert = nil
     }
 }

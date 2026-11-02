@@ -6,6 +6,8 @@ struct ExplanationBubbleView: View {
   let isProcessing: Bool
   let dismissAction: () -> Void
 
+  @State private var copied = false
+
   private let minBubbleWidth: CGFloat = 440
   private let maxBubbleWidth: CGFloat = 560
   private let maxContentHeight: CGFloat = 260
@@ -49,6 +51,7 @@ struct ExplanationBubbleView: View {
       .foregroundColor(.secondary)
       .background(Color.secondary.opacity(0.08), in: Circle())
       .help("Dismiss")
+      .accessibilityLabel("Dismiss explanation")
       .keyboardShortcut(.cancelAction)
     }
   }
@@ -95,13 +98,14 @@ struct ExplanationBubbleView: View {
       Button {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(suggestion.rewrittenText, forType: .string)
+        copied = true
       } label: {
-        Label("Copy", systemImage: "doc.on.doc")
+        Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
       }
       .disabled(isProcessing || suggestion.rewrittenText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
       Button(action: dismissAction) {
-        Label("Done", systemImage: "checkmark")
+        Text(isProcessing ? "Cancel" : "Done")
       }
       .buttonStyle(.borderedProminent)
     }

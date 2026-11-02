@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct SuggestionBubbleView: View {
@@ -13,6 +14,7 @@ struct SuggestionBubbleView: View {
   private let primaryTools: [WritingTool] = [.proofread, .rewrite, .friendly, .professional, .concise, .translate]
   private let secondaryTools: [WritingTool] = [.summary, .keyPoints, .list, .custom]
 
+  @State private var copied = false
   @State private var editedText: String
   @FocusState private var isEditorFocused: Bool
 
@@ -78,12 +80,13 @@ struct SuggestionBubbleView: View {
       .foregroundColor(.secondary)
       .background(Color.secondary.opacity(0.08), in: Circle())
       .help("Dismiss")
+      .accessibilityLabel("Dismiss Writing Tools")
       .keyboardShortcut(.cancelAction)
     }
   }
 
   private var toolPicker: some View {
-    HStack(spacing: 6) {
+    LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 6)], spacing: 6) {
       ForEach(primaryTools) { tool in
         WritingToolButton(
           tool: tool,
@@ -159,6 +162,7 @@ struct SuggestionBubbleView: View {
           RoundedRectangle(cornerRadius: 8, style: .continuous)
             .stroke(Color.secondary.opacity(0.16), lineWidth: 1)
         )
+        .accessibilityLabel("Suggested text")
         .focused($isEditorFocused)
         .disabled(isProcessing)
     }
@@ -166,9 +170,25 @@ struct SuggestionBubbleView: View {
 
   private var footer: some View {
     HStack(spacing: 8) {
+      Button {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(editedText, forType: .string)
+        copied = true
+      } label: {
+        Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
+      }
+      .disabled(isProcessing || editedText.isEmpty)
+      .onChange(of: editedText) { _ in copied = false }
+      Button {
+        runToolAction(selectedTool)
+      } label: {
+        Label("Retry", systemImage: "arrow.clockwise")
+      }
+      .disabled(isProcessing)
+      .help("Generate a new result from the original selection")
       Spacer()
       Button(action: dismissAction) {
-        Label("Dismiss", systemImage: "xmark")
+        Text(isProcessing ? "Cancel" : "Dismiss")
       }
       .help("Dismiss")
       Button {

@@ -1,13 +1,16 @@
-import SwiftUI
+import AppKit
 
+/// AppKit owns the application lifecycle and its single Preferences window.
+/// SwiftUI is used inside the windows, without a second Settings scene.
 @main
-struct InplaceAIApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-
-    var body: some Scene {
-        Settings {
-            PreferencesView(appState: AppState.shared)
-                .frame(width: 420)
+@MainActor
+struct InplaceAIApp {
+    static func main() {
+        let application = NSApplication.shared
+        let delegate = AppDelegate()
+        application.delegate = delegate
+        withExtendedLifetime(delegate) {
+            application.run()
         }
     }
 }

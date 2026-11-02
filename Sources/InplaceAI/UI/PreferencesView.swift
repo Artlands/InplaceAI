@@ -87,33 +87,21 @@ struct PreferencesView: View {
         }
     }
 
-    /// Models to show in the Picker. Falls back to a small static list if the
-    /// API hasn't returned results yet or the endpoint doesn't support model listing.
     private var modelOptions: [String] {
-        if !appState.availableModels.isEmpty {
-            return appState.availableModels
-        }
-        // Static fallback so the picker isn't empty on first launch
-        return [
-            "gpt-4.1",
-            "gpt-4.1-mini",
-            "gpt-4.1-nano",
-            "gpt-4o",
-            "gpt-4o-mini",
-            "gpt-4.5-preview",
-            "o3-mini",
-            "o4-mini"
-        ]
+        var models = appState.availableModels
+        if !models.contains(appState.model) { models.insert(appState.model, at: 0) }
+        return models
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 hero
+                quickStart
                 providerSection
+                securitySection
                 promptSection
                 translationSection
-                securitySection
                 systemSection
             }
             .padding(24)
@@ -128,6 +116,16 @@ struct PreferencesView: View {
         }
         .onAppear {
             appState.refreshModels()
+        }
+    }
+
+    private var quickStart: some View {
+        SettingsCard(title: "Getting started", symbolName: "keyboard") {
+            Text("Select text in another app, then press ⌥⇧R for Writing Tools or ⌥⇧X to explain it.")
+                .font(.callout)
+            Text("Review and edit the result, then use Replace (⌘Return) or Copy. Press Esc to dismiss or cancel a request.")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
     }
 
@@ -185,10 +183,8 @@ struct PreferencesView: View {
                     HStack(spacing: 12) {
                         Picker("Model", selection: $appState.model) {
                             ForEach(modelOptions, id: \.self) { model in
-                                Text(model).tag(model)
+                                Text(model.isEmpty ? "Enter a model below" : model).tag(model)
                             }
-                            Divider()
-                            Text("Custom...").tag("__custom__")
                         }
                         .labelsHidden()
                         .frame(maxWidth: .infinity)
@@ -211,6 +207,13 @@ struct PreferencesView: View {
                     }
                 }
 
+                if let error = appState.modelFetchError {
+                    Label(error, systemImage: "info.circle")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 TextField("Or type a model name", text: $appState.model)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
@@ -220,9 +223,9 @@ struct PreferencesView: View {
     }
 
     private var promptSection: some View {
-        SettingsCard(title: "Prompt", symbolName: "text.badge.checkmark") {
+        SettingsCard(title: "Custom writing tool", symbolName: "text.badge.checkmark") {
             VStack(alignment: .leading, spacing: 12) {
-                FieldGroup(title: "Preset", help: "Choose a preset or customize your own rewrite instruction. The prompt is saved automatically.") {
+                FieldGroup(title: "Preset", help: "Used by More → Custom in Writing Tools. Choose a preset or edit the instruction; changes save automatically.") {
                     Picker("Preset", selection: $selectedPresetID) {
                         ForEach(PromptLibrary.presets) { preset in
                             Text(preset.title).tag(preset.id)
@@ -278,8 +281,9 @@ struct PreferencesView: View {
                 }
                 .textFieldStyle(.roundedBorder)
                 .font(.system(.body, design: .monospaced))
+                .onSubmit { appState.updateAPIKey(apiKeyDraft) }
 
-                Text(apiKeyHelpText)
+                Text(apiKeyHelpText + " Saved securely in macOS Keychain.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -332,14 +336,18 @@ struct PreferencesView: View {
                     )
                     .foregroundColor(appState.accessibilityTrusted ? .green : .orange)
                     Spacer()
-                    Button("Request Permission") {
+                    Button("Open Accessibility Settings") {
                         appState.requestAccessibilityPermission()
                     }
+                    .disabled(appState.accessibilityTrusted)
                 }
 
                 Divider()
 
-                Toggle("Start at login", isOn: $appState.startAtLogin.animation())
+                Toggle("Start at login", isOn: Binding(
+                    get: { appState.startAtLogin },
+                    set: { appState.setStartAtLogin($0) }
+                ))
             }
         }
     }

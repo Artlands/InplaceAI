@@ -24,7 +24,7 @@ final class SelectionMonitor {
     let sourceBundleIdentifier = bundleIdentifier(for: element)
     var selection: (text: String, range: CFRange?)?
 
-    if TextSelection.isBrowserBundleIdentifier(sourceBundleIdentifier) {
+    if TextSelection.prefersClipboardSelection(sourceBundleIdentifier) {
       selection = try captureSelectionViaClipboard(focusedElement: element)
     }
 
@@ -139,42 +139,17 @@ final class SelectionMonitor {
       in: currentValue,
       originalText: originalText
     )
-    let expectedValue = expectedElementValue(
-      currentValue: currentValue,
-      range: effectiveRange,
-      replacement: text,
-      originalText: originalText
-    )
-
-    // Ensure the same selection is focused before attempting replacement.
-    let selectionActivated = ensureSelectionActive(for: element, range: effectiveRange, selectAllFallback: false)
-    let currentSelectionMatchesOriginal = selectedTextMatches(originalText, on: element)
-    let canReplaceSelectedText = selectionActivated || currentSelectionMatchesOriginal
-    guard expectedValue != nil || canReplaceSelectedText else {
+    if currentValue != nil, effectiveRange == nil {
+      throw SelectionError.selectionChanged
+    }
+    ensureSelectionActive(for: element, range: effectiveRange, selectAllFallback: false)
+    guard selectedTextMatches(originalText, on: element) else {
       throw SelectionError.selectionChanged
     }
 
-    if canReplaceSelectedText,
-      setSelectedTextAttribute(on: element, text: text),
-      replacementConfirmed(
-        expectedValue: expectedValue,
-        replacement: text,
-        on: element
-      )
-    {
-      return
-    }
-
-    if expectedValue != nil,
-      try replaceUsingSelectedRange(on: element, replacement: text, providedRange: effectiveRange),
-      replacementConfirmed(
-        expectedValue: expectedValue,
-        replacement: text,
-        on: element
-      )
-    {
-      return
-    }
+    // A successful AX write must not be retried: some apps expose stale values
+    // after editing, which previously caused a second replacement or paste.
+    if setSelectedTextAttribute(on: element, text: text) { return }
 
     throw SelectionError.unsupportedElement
   }
@@ -193,10 +168,25 @@ final class SelectionMonitor {
 
     activateApplication(for: element)
 
-    if let range = selection.selectedRange,
-      !TextSelection.isBrowserBundleIdentifier(selection.sourceBundleIdentifier)
-    {
+    if !TextSelection.prefersClipboardSelection(selection.sourceBundleIdentifier),
+       let value = elementStringValue(element) {
+      guard let range = ReplacementSafety.range(
+        selection.selectedRange, in: value, originalText: selection.text
+      ) else { throw SelectionError.selectionChanged }
       ensureSelectionActive(for: element, range: range, selectAllFallback: false)
+    }
+
+    // Activation is asynchronous. Only send keys once the captured field is focused.
+    let deadline = Date().addingTimeInterval(0.6)
+    while Date() < deadline {
+      if let focused = try? focusedElement(), CFEqual(focused, element) { break }
+      RunLoop.main.run(until: Date().addingTimeInterval(0.03))
+    }
+    guard let focused = try? focusedElement(), CFEqual(focused, element),
+          let copied = try captureSelectionViaClipboard(focusedElement: element)?.text,
+          selectionTextMatches(copied, selection.text),
+          let stillFocused = try? focusedElement(), CFEqual(stillFocused, element) else {
+      throw SelectionError.selectionChanged
     }
 
     let pasteboard = NSPasteboard.general
@@ -209,7 +199,7 @@ final class SelectionMonitor {
       pasteboard.setString(text, forType: .string)
     }
 
-    usleep(80_000)
+    let replacementChangeCount = pasteboard.changeCount
     CGSynthesizeCommandV()
 
     // Wait for the synthetic paste to propagate.
@@ -217,13 +207,10 @@ final class SelectionMonitor {
       RunLoop.main.run(until: Date().addingTimeInterval(0.066))
     }
 
-    // The AX value is unreliable after synthetic paste, so we don't verify it here.
-    // The selection integrity will be checked on the next call to captureSelection.
-
-    if !existingItems.isEmpty {
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-        self.restorePasteboard(pasteboard, items: existingItems)
-      }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+      // Never overwrite something the user copied while the paste was completing.
+      guard pasteboard.changeCount == replacementChangeCount else { return }
+      self.restorePasteboard(pasteboard, items: existingItems)
     }
   }
 
@@ -469,110 +456,13 @@ final class SelectionMonitor {
     return error == .success
   }
 
-  private func replaceUsingSelectedRange(
-    on element: AXUIElement,
-    replacement: String,
-    providedRange: CFRange?
-  ) throws -> Bool {
-    let range = providedRange ?? selectedTextRange(for: element)
-
-    guard let range else { return false }
-    if range.length == 0 {
-      throw SelectionError.emptySelection
-    }
-
-    guard
-      let fullValue = elementStringValue(element),
-      let swiftRange = Range(NSRange(location: range.location, length: range.length), in: fullValue)
-    else {
-      return false
-    }
-
-    var updated = fullValue
-    updated.replaceSubrange(swiftRange, with: replacement)
-
-    let error = AXUIElementSetAttributeValue(
-      element,
-      kAXValueAttribute as CFString,
-      updated as CFTypeRef
-    )
-
-    return error == .success
-  }
-
-  private func expectedElementValue(
-    currentValue: String?,
-    range: CFRange?,
-    replacement: String,
-    originalText: String?
-  ) -> String? {
-    guard let currentValue else { return nil }
-
-    if let range,
-      let swiftRange = Range(NSRange(location: range.location, length: range.length), in: currentValue)
-    {
-      var updated = currentValue
-      updated.replaceSubrange(swiftRange, with: replacement)
-      return updated
-    }
-
-    guard let originalText, originalText.isEmpty == false else {
-      return nil
-    }
-
-    guard let firstMatch = currentValue.range(of: originalText) else {
-      return nil
-    }
-    let lastMatch = currentValue.range(of: originalText, options: .backwards)
-    guard firstMatch == lastMatch else {
-      return nil  // Avoid ambiguous replacements when the text repeats.
-    }
-
-    var updated = currentValue
-    updated.replaceSubrange(firstMatch, with: replacement)
-    return updated
-  }
-
   private func sanitizedRange(
     _ range: CFRange?,
     in currentValue: String?,
     originalText: String?
   ) -> CFRange? {
-    guard let currentValue, let originalText, originalText.isEmpty == false else {
-      return range
-    }
-
-    guard let range else {
-      return uniqueRange(of: originalText, in: currentValue)
-    }
-
-    guard
-      let swiftRange = Range(NSRange(location: range.location, length: range.length), in: currentValue),
-      String(currentValue[swiftRange]) == originalText
-    else {
-      return uniqueRange(of: originalText, in: currentValue)
-    }
-
-    return range
-  }
-
-  private func uniqueRange(of substring: String, in text: String) -> CFRange? {
-    var searchStart = text.startIndex
-    var foundRange: Range<String.Index>?
-
-    while searchStart < text.endIndex,
-      let range = text.range(of: substring, range: searchStart..<text.endIndex)
-    {
-      if foundRange != nil {
-        return nil  // Multiple matches; avoid guessing.
-      }
-      foundRange = range
-      searchStart = range.upperBound
-    }
-
-    guard let foundRange else { return nil }
-    let nsRange = NSRange(foundRange, in: text)
-    return CFRange(location: nsRange.location, length: nsRange.length)
+    guard let currentValue, let originalText else { return range }
+    return ReplacementSafety.range(range, in: currentValue, originalText: originalText)
   }
 
   private func selectedTextRange(for element: AXUIElement) -> CFRange? {
@@ -611,33 +501,6 @@ final class SelectionMonitor {
       return attributed.string
     }
     return nil
-  }
-
-  private func replacementConfirmed(
-    expectedValue: String?,
-    replacement: String,
-    on element: AXUIElement
-  ) -> Bool {
-    for _ in 0..<5 {
-      // Let the main run loop run so synthetic events can propagate and
-      // the target app's AX value can update.
-      RunLoop.main.run(until: Date().addingTimeInterval(0.066))
-
-      if let expectedValue,
-        let currentValue = elementStringValue(element),
-        currentValue == expectedValue
-      {
-        return true
-      }
-
-      if let selection = try? selectedTextAndRange(for: element),
-        selection.text == replacement
-      {
-        return true
-      }
-    }
-
-    return false
   }
 
   private func selectedTextMatches(_ originalText: String?, on element: AXUIElement) -> Bool {
@@ -685,8 +548,7 @@ final class SelectionMonitor {
   }
 
   private func restorePasteboard(_ pasteboard: NSPasteboard, items: [NSPasteboardItem]) {
-    guard !items.isEmpty else { return }
     pasteboard.clearContents()
-    pasteboard.writeObjects(items)
+    if !items.isEmpty { pasteboard.writeObjects(items) }
   }
 }

@@ -225,7 +225,7 @@ final class InlineSuggestionWindow: NSObject {
     let anchorRect = anchor ?? lastAnchor
     if isDragging { return }
     let screen = anchorRect.flatMap(screenForAXRect) ?? window.screen ?? NSScreen.main
-    let convertedAnchor = anchorRect.map { convertAXRectToCocoa($0, on: screen) } ?? lastConvertedAnchor
+    let convertedAnchor = anchorRect.map { convertAXRectToCocoa($0) } ?? lastConvertedAnchor
     let target = convertedAnchor.map { CGPoint(x: $0.midX, y: $0.maxY) } ?? NSEvent.mouseLocation
 
     let size = window.frame.size
@@ -285,7 +285,7 @@ final class InlineSuggestionWindow: NSObject {
       queue: .main
     ) { [weak self] _ in
       Task { @MainActor in
-        self?.dismiss()
+        self?.dismiss(notify: true)
       }
     }
   }
@@ -327,13 +327,15 @@ final class InlineSuggestionWindow: NSObject {
   }
 
   private func screenForAXRect(_ rect: CGRect) -> NSScreen? {
-    let center = CGPoint(x: rect.midX, y: rect.midY)
+    let converted = convertAXRectToCocoa(rect)
+    let center = CGPoint(x: converted.midX, y: converted.midY)
     return NSScreen.screens.first { $0.frame.contains(center) }
   }
 
-  private func convertAXRectToCocoa(_ rect: CGRect, on screen: NSScreen?) -> CGRect {
-    guard let screen else { return rect }
-    let flippedY = screen.frame.origin.y + screen.frame.height - rect.origin.y - rect.height
+  private func convertAXRectToCocoa(_ rect: CGRect) -> CGRect {
+    // AX coordinates are relative to the primary display, not the target display.
+    guard let primary = NSScreen.screens.first else { return rect }
+    let flippedY = primary.frame.maxY - rect.maxY
     return CGRect(x: rect.origin.x, y: flippedY, width: rect.width, height: rect.height)
   }
 
@@ -344,6 +346,7 @@ final class InlineSuggestionWindow: NSObject {
 
     let recognizer = NSPanGestureRecognizer(target: self, action: #selector(handleDragGesture(_:)))
     recognizer.delaysPrimaryMouseButtonEvents = false
+    recognizer.delegate = self
     view.addGestureRecognizer(recognizer)
     dragRecognizer = recognizer
   }
@@ -382,5 +385,15 @@ extension InlineSuggestionWindow: NSWindowDelegate {
   func windowDidResize(_ notification: Notification) {
     guard let window = notification.object as? NSWindow else { return }
     lastSize = window.frame.size
+  }
+}
+
+extension InlineSuggestionWindow: NSGestureRecognizerDelegate {
+  func gestureRecognizerShouldBegin(_ gestureRecognizer: NSGestureRecognizer) -> Bool {
+    guard let view = gestureRecognizer.view else { return false }
+    let location = gestureRecognizer.location(in: view)
+    let distanceFromTop = view.isFlipped ? location.y : view.bounds.height - location.y
+    // Drag the header only; text selection, scrolling, and tool buttons stay interactive.
+    return distanceFromTop >= 0 && distanceFromTop < 42 && location.x < view.bounds.width - 52
   }
 }

@@ -10,14 +10,17 @@ struct TextSelection {
     let sourceBundleIdentifier: String?
 
     var requiresVerifiedPasteReplacement: Bool {
-        selectedRange == nil || Self.isBrowserBundleIdentifier(sourceBundleIdentifier)
+        selectedRange == nil || Self.prefersClipboardSelection(sourceBundleIdentifier)
     }
 
-    static func isBrowserBundleIdentifier(_ bundleIdentifier: String?) -> Bool {
-        browserBundleIdentifiers.contains(bundleIdentifier ?? "")
+    static func prefersClipboardSelection(_ bundleIdentifier: String?) -> Bool {
+        clipboardSelectionBundleIdentifiers.contains(bundleIdentifier ?? "")
     }
 
-    private static let browserBundleIdentifiers: Set<String> = [
+    // VS Code can acknowledge AX selected-text writes without updating its document.
+    // Use the editor's normal Copy/Paste commands, as we do for browser editors.
+    private static let clipboardSelectionBundleIdentifiers: Set<String> = [
+        "com.microsoft.VSCode",
         "com.apple.Safari",
         "com.google.Chrome",
         "com.google.Chrome.canary",

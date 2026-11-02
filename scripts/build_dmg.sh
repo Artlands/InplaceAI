@@ -65,8 +65,8 @@ ensure_services_plist() {
     fi
 
     /usr/libexec/PlistBuddy -c "Delete :NSServices" "$plist" >/dev/null 2>&1 || true
-    /usr/libexec/PlistBuddy -c "Set :InplaceAIBundleSchemaVersion 2" "$plist" >/dev/null 2>&1 || \
-        /usr/libexec/PlistBuddy -c "Add :InplaceAIBundleSchemaVersion string 2" "$plist"
+    /usr/libexec/PlistBuddy -c "Set :InplaceAIBundleSchemaVersion 3" "$plist" >/dev/null 2>&1 || \
+        /usr/libexec/PlistBuddy -c "Add :InplaceAIBundleSchemaVersion string 3" "$plist"
     /usr/libexec/PlistBuddy -c "Add :NSServices array" "$plist"
     /usr/libexec/PlistBuddy -c "Add :NSServices:0 dict" "$plist"
     /usr/libexec/PlistBuddy -c "Add :NSServices:0:NSMenuItem dict" "$plist"
@@ -79,6 +79,14 @@ ensure_services_plist() {
     /usr/libexec/PlistBuddy -c "Add :NSServices:0:NSReturnTypes array" "$plist"
     /usr/libexec/PlistBuddy -c "Add :NSServices:0:NSReturnTypes:0 string NSStringPboardType" "$plist"
     /usr/libexec/PlistBuddy -c "Add :NSServices:0:NSReturnTypes:1 string public.utf8-plain-text" "$plist"
+    /usr/libexec/PlistBuddy -c "Add :NSServices:1 dict" "$plist"
+    /usr/libexec/PlistBuddy -c "Add :NSServices:1:NSMenuItem dict" "$plist"
+    /usr/libexec/PlistBuddy -c "Add :NSServices:1:NSMenuItem:default string Explain with InplaceAI" "$plist"
+    /usr/libexec/PlistBuddy -c "Add :NSServices:1:NSMessage string explainSelection" "$plist"
+    /usr/libexec/PlistBuddy -c "Add :NSServices:1:NSPortName string ${APP_NAME}" "$plist"
+    /usr/libexec/PlistBuddy -c "Add :NSServices:1:NSSendTypes array" "$plist"
+    /usr/libexec/PlistBuddy -c "Add :NSServices:1:NSSendTypes:0 string NSStringPboardType" "$plist"
+    /usr/libexec/PlistBuddy -c "Add :NSServices:1:NSSendTypes:1 string public.utf8-plain-text" "$plist"
 }
 
 ensure_icns
@@ -88,14 +96,11 @@ swift build -c release ${BUILD_ARCHS}
 
 mkdir -p "$DIST_DIR"
 
+# Ask SwiftPM for this build's output instead of searching stale build directories.
+BIN_DIR="$(swift build -c release ${BUILD_ARCHS} --show-bin-path)"
 APP_PATH=""
-BUILT_APP="${ROOT}/.build/apple/Products/Release/${APP_NAME}.app"
-ALT_APP="${ROOT}/.build/Release/${APP_NAME}.app"
-
-if [[ -d "$BUILT_APP" ]]; then
-    APP_PATH="$BUILT_APP"
-elif [[ -d "$ALT_APP" ]]; then
-    APP_PATH="$ALT_APP"
+if [[ -d "${BIN_DIR}/${APP_NAME}.app" ]]; then
+    APP_PATH="${BIN_DIR}/${APP_NAME}.app"
 fi
 
 STAGED_APP="${DIST_DIR}/${APP_NAME}.app"
@@ -105,8 +110,8 @@ if [[ -n "$APP_PATH" ]]; then
     echo "Staging app bundle..."
     rsync -a "$APP_PATH" "$DIST_DIR/"
 else
-    BIN_PATH="$(find "$ROOT/.build" -path "*/release/${APP_NAME}" -type f | head -n 1)"
-    if [[ -z "$BIN_PATH" ]]; then
+    BIN_PATH="${BIN_DIR}/${APP_NAME}"
+    if [[ ! -f "$BIN_PATH" ]]; then
         echo "Error: built binary not found after build." >&2
         exit 1
     fi
@@ -132,7 +137,7 @@ else
     <key>CFBundleIdentifier</key>
     <string>com.inplaceai.desktop</string>
     <key>InplaceAIBundleSchemaVersion</key>
-    <string>2</string>
+    <string>3</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>

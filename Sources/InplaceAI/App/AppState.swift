@@ -17,7 +17,7 @@ final class AppState: ObservableObject {
   @Published var instruction: String
   @Published var primaryTranslationLanguage: TranslationLanguage
   @Published var secondaryTranslationLanguage: TranslationLanguage
-  @Published var startAtLogin: Bool
+  @Published private(set) var startAtLogin: Bool
   @Published var isProcessing = false
   @Published var lastSelection: TextSelection?
   @Published var suggestion: Suggestion?
@@ -25,11 +25,20 @@ final class AppState: ObservableObject {
   @Published var alert: AppAlert?
   @Published var availableModels: [String] = []
   @Published var isFetchingModels = false
+  @Published var modelFetchError: String?
 
   func toggleStartAtLogin() {
-    let newValue = !startAtLogin
-    startAtLogin = newValue
-    launchController.setStartAtLogin(newValue)
+    setStartAtLogin(!startAtLogin)
+  }
+
+  func setStartAtLogin(_ enabled: Bool) {
+    do {
+      try launchController.setStartAtLogin(enabled)
+      startAtLogin = enabled
+      settingsStore.save(startAtLogin: enabled)
+    } catch {
+      alert = .network("Could not update Start at login. " + error.localizedDescription)
+    }
   }
 
   private let settingsStore = SettingsStore()
@@ -40,6 +49,9 @@ final class AppState: ObservableObject {
   private let launchController = LaunchController()
   private var cancellables = Set<AnyCancellable>()
   private var accessibilityPollTask: Task<Void, Never>?
+  private let requests = RequestController()
+  private var modelFetchTask: Task<Void, Never>?
+  private var modelFetchID: UUID?
   private var previousProvider: ModelProvider
 
   private init() {
@@ -52,20 +64,18 @@ final class AppState: ObservableObject {
     primaryTranslationLanguage = settings.primaryTranslationLanguage
     secondaryTranslationLanguage = settings.secondaryTranslationLanguage
     let savedStartAtLogin = settings.startAtLogin
-    startAtLogin = launchController.isStartAtLogin() ? true : savedStartAtLogin
+    startAtLogin = launchController.isStartAtLogin()
     apiKey = settings.apiKey
     
     if startAtLogin != savedStartAtLogin {
         settingsStore.save(startAtLogin: startAtLogin)
     }
     
-    if startAtLogin {
-        launchController.setStartAtLogin(true)
-    }
 
     $provider
       .dropFirst()
       .sink { [weak self] in
+        self?.invalidateModels()
         self?.settingsStore.save(provider: $0)
         // Update base URL to provider default if unchanged from previous default.
         self?.maybeResetBaseURL(for: $0)
@@ -74,7 +84,10 @@ final class AppState: ObservableObject {
 
     $baseURL
       .dropFirst()
-      .sink { [weak self] in self?.settingsStore.save(baseURL: $0) }
+      .sink { [weak self] in
+        self?.invalidateModels()
+        self?.settingsStore.save(baseURL: $0)
+      }
       .store(in: &cancellables)
 
     $model
@@ -97,13 +110,7 @@ final class AppState: ObservableObject {
       .sink { [weak self] in self?.settingsStore.save(secondaryTranslationLanguage: $0) }
       .store(in: &cancellables)
 
-    $startAtLogin
-      .dropFirst()
-      .sink { [weak self] in
-        self?.settingsStore.save(startAtLogin: $0)
-        self?.launchController.setStartAtLogin($0)
-      }
-      .store(in: &cancellables)
+
   }
 
   func triggerRewrite() {
@@ -113,9 +120,8 @@ final class AppState: ObservableObject {
   func triggerExplain() {
     guard canRunSelectionAction() else { return }
 
-    Task {
-      try? await Task.sleep(nanoseconds: 180_000_000)
-      await captureSelectionAndExplain()
+    beginRequest {
+      await self.captureSelectionAndExplain()
     }
   }
 
@@ -128,8 +134,8 @@ final class AppState: ObservableObject {
       return
     }
 
-    Task {
-      await generateExplanation(
+    beginRequest {
+      await self.generateExplanation(
         for: TextSelection(
           text: text,
           frame: nil,
@@ -155,16 +161,22 @@ final class AppState: ObservableObject {
   }
 
   func updateAPIKey(_ key: String) {
-    apiKey = key
-    storeAPIKey(key)
+    let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+    do {
+      try settingsStore.save(apiKey: trimmed)
+      apiKey = trimmed
+      invalidateModels()
+      refreshModels()
+    } catch {
+      alert = .network(error.localizedDescription)
+    }
   }
 
   private func maybeResetBaseURL(for provider: ModelProvider) {
-    // Only swap the base URL when the current value is still the previous
-    // provider's default — never clobber a user-customized URL.
+    // OpenAI always uses its official endpoint; otherwise preserve customized URLs.
     defer { previousProvider = provider }
     let trimmed = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-    if trimmed.isEmpty || trimmed == previousProvider.defaultBaseURL {
+    if provider == .openAI || trimmed.isEmpty || trimmed == previousProvider.defaultBaseURL {
       baseURL = provider.defaultBaseURL
     }
   }
@@ -172,8 +184,8 @@ final class AppState: ObservableObject {
   private func startWritingTools(with tool: WritingTool) {
     guard canRunSelectionAction() else { return }
 
-    Task {
-      await captureSelectionAndRun(tool)
+    beginRequest {
+      await self.captureSelectionAndRun(tool)
     }
   }
 
@@ -185,8 +197,8 @@ final class AppState: ObservableObject {
       return
     }
 
-    Task {
-      await generateSuggestion(for: selection, tool: tool)
+    beginRequest {
+      await self.generateSuggestion(for: selection, tool: tool)
     }
   }
 
@@ -204,21 +216,28 @@ final class AppState: ObservableObject {
   }
 
   private func canRunModelAction() -> Bool {
-    guard !requiresAPIKey || !apiKey.isEmpty else {
+    guard !isProcessing else { return false }
+    guard !requiresAPIKey || !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
       alert = .missingAPIKey
       return false
     }
 
-    return !isProcessing
+    do {
+      _ = try ProviderConfiguration.endpoint(baseURL: baseURL, path: "chat/completions")
+      _ = try ProviderConfiguration.modelName(model)
+    } catch {
+      alert = .network(error.localizedDescription)
+      return false
+    }
+    return true
   }
 
   private func captureSelectionAndRun(_ tool: WritingTool) async {
-    isProcessing = true
     suggestionWindow.dismiss()
-    defer { isProcessing = false }
 
     do {
       let selection = try selectionMonitor.captureSelection()
+      try Task.checkCancellation()
       lastSelection = selection
 
       guard selection.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
@@ -230,17 +249,17 @@ final class AppState: ObservableObject {
     } catch let error as SelectionError {
       alert = .selection(error)
     } catch {
+      guard !Task.isCancelled else { return }
       alert = .network(error.localizedDescription)
     }
   }
 
   private func captureSelectionAndExplain() async {
-    isProcessing = true
     suggestionWindow.dismiss()
-    defer { isProcessing = false }
 
     do {
       let selection = try selectionMonitor.captureSelectionForReading()
+      try Task.checkCancellation()
       lastSelection = selection
 
       guard selection.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
@@ -252,13 +271,12 @@ final class AppState: ObservableObject {
     } catch let error as SelectionError {
       alert = .selection(error)
     } catch {
+      guard !Task.isCancelled else { return }
       alert = .network(error.localizedDescription)
     }
   }
 
   private func generateSuggestion(for selection: TextSelection, tool: WritingTool) async {
-    isProcessing = true
-    defer { isProcessing = false }
 
     let toolInstruction = tool.instruction(
       customInstruction: instruction,
@@ -282,7 +300,7 @@ final class AppState: ObservableObject {
       ) { [weak self] action in
         guard let self else { return }
         if case .dismiss = action {
-          self.suggestion = nil
+          self.cancelRequest()
         }
       }
 
@@ -296,6 +314,7 @@ final class AppState: ObservableObject {
         tool: tool
       )
 
+      try Task.checkCancellation()
       self.suggestion = suggestion
       suggestionWindow.present(
         suggestion: suggestion,
@@ -307,20 +326,19 @@ final class AppState: ObservableObject {
         case .accept(let text):
           self.applySuggestion(suggestion, overrideText: text)
         case .dismiss:
-          self.suggestion = nil
+          self.cancelRequest()
         case .runTool(let tool):
           self.runWritingTool(tool)
         }
       }
     } catch {
+      guard !Task.isCancelled else { return }
       alert = .network(error.localizedDescription)
       suggestionWindow.dismiss()
     }
   }
 
   private func generateExplanation(for selection: TextSelection) async {
-    isProcessing = true
-    defer { isProcessing = false }
 
     let explanationInstruction = """
       Explain the selected text clearly in plain language. Clarify the main idea, important context, specialized terms, and any implied meaning. Do not rewrite, edit, or continue the source text. Return only the explanation.
@@ -339,7 +357,7 @@ final class AppState: ObservableObject {
         anchor: selection.frame,
         isProcessing: true
       ) { [weak self] in
-        self?.suggestion = nil
+        self?.cancelRequest()
       }
 
       let explanation = try await openAIService.rewrite(
@@ -352,22 +370,23 @@ final class AppState: ObservableObject {
         tool: nil
       )
 
+      try Task.checkCancellation()
       self.suggestion = explanation
       suggestionWindow.presentExplanation(
         suggestion: explanation,
         anchor: selection.frame,
         isProcessing: false
       ) { [weak self] in
-        self?.suggestion = nil
+        self?.cancelRequest()
       }
     } catch {
+      guard !Task.isCancelled else { return }
       alert = .network(error.localizedDescription)
       suggestionWindow.dismiss()
     }
   }
 
   private func applySuggestion(_ suggestion: Suggestion, overrideText: String?) {
-    suggestionWindow.dismiss()
     let replacement = overrideText ?? suggestion.rewrittenText
     guard let selection = lastSelection else {
       alert = .selection(.selectionChanged)
@@ -378,26 +397,44 @@ final class AppState: ObservableObject {
       if selection.requiresVerifiedPasteReplacement {
         try selectionMonitor.replaceSelectionUsingVerifiedPaste(with: replacement, selection: selection)
       } else {
-        try selectionMonitor.replaceSelection(
-          with: replacement,
-          element: selection.element,
-          selectedRange: selection.selectedRange,
-          originalText: selection.text
-        )
+        do {
+          try selectionMonitor.replaceSelection(
+            with: replacement,
+            element: selection.element,
+            selectedRange: selection.selectedRange,
+            originalText: selection.text
+          )
+        } catch SelectionError.unsupportedElement {
+          try selectionMonitor.replaceSelectionUsingVerifiedPaste(with: replacement, selection: selection)
+        }
       }
+      cancelRequest()
+    } catch let error as SelectionError {
+      // Keep the edited result available to copy when the source cannot be confirmed.
+      alert = .selection(error)
     } catch {
-      do {
-        try selectionMonitor.replaceSelectionUsingVerifiedPaste(with: replacement, selection: selection)
-      } catch let selectionError as SelectionError {
-        alert = .selection(selectionError)
-      } catch {
-        alert = .selection(.selectionChanged)
-      }
+      alert = .selection(.selectionChanged)
     }
   }
 
-  private func storeAPIKey(_ key: String) {
-    settingsStore.save(apiKey: key)
+  /// Reserve the request before yielding so rapid hotkeys cannot start duplicate work.
+  private func beginRequest(_ operation: @escaping @MainActor () async -> Void) {
+    isProcessing = true
+    requests.start {
+      // Let the status menu close and the source app regain focus.
+      do { try await Task.sleep(nanoseconds: 180_000_000) } catch { return }
+      await operation()
+    } onFinish: { [weak self] in
+      self?.isProcessing = false
+    }
+  }
+
+  private func cancelRequest() {
+    requests.cancel()
+    isProcessing = false
+    suggestion = nil
+    lastSelection = nil
+    suggestionWindow.dismiss()
   }
 
   private var requiresAPIKey: Bool {
@@ -408,21 +445,45 @@ final class AppState: ObservableObject {
   /// so the floating panel doesn't persist in the window server across
   /// monitor reconfigurations.
   func dismissSuggestionWindow() {
-    suggestionWindow.dismiss()
+    cancelRequest()
   }
 
-  /// Fetch available models from the configured endpoint and update `availableModels`.
+  private func invalidateModels() {
+    modelFetchTask?.cancel()
+    modelFetchTask = nil
+    modelFetchID = nil
+    isFetchingModels = false
+    availableModels = []
+    modelFetchError = nil
+    modelFetcher.clearCache()
+  }
+
   func refreshModels() {
-    guard !apiKey.isEmpty || provider != .openAI else { return }
+    invalidateModels()
+    guard !apiKey.isEmpty || provider != .openAI else {
+      modelFetchError = "Save an API key to load models, or enter a model name manually."
+      return
+    }
+    let id = UUID()
+    let endpoint = baseURL
+    let key = apiKey
+    modelFetchID = id
     isFetchingModels = true
-    Task {
-      defer { isFetchingModels = false }
+    modelFetchTask = Task {
+      defer {
+        if modelFetchID == id {
+          isFetchingModels = false
+          modelFetchTask = nil
+        }
+      }
       do {
-        let models = try await modelFetcher.fetch(baseURL: baseURL, apiKey: apiKey)
+        let models = try await modelFetcher.fetch(baseURL: endpoint, apiKey: key, forceRefresh: true)
+        guard modelFetchID == id, !Task.isCancelled else { return }
         availableModels = models
+        if models.isEmpty { modelFetchError = "No models returned. Enter a model name manually." }
       } catch {
-        // Silently fall back to an empty list — the user can still type a model name.
-        availableModels = []
+        guard modelFetchID == id, !Task.isCancelled else { return }
+        modelFetchError = error.localizedDescription
       }
     }
   }

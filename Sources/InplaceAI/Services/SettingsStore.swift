@@ -135,8 +135,9 @@ struct SettingsStore {
         }
 
         if let legacy = dict?[Keys.apiKey], !legacy.isEmpty {
-            keychain.write(legacy)
-            scrubLegacyAPIKey()
+            if (try? keychain.write(legacy)) != nil {
+                scrubLegacyAPIKey()
+            }
             return legacy
         }
 
@@ -186,11 +187,11 @@ struct SettingsStore {
         save(dict)
     }
 
-    func save(apiKey: String) {
+    func save(apiKey: String) throws {
         if apiKey.isEmpty {
-            keychain.delete()
+            try keychain.delete()
         } else {
-            keychain.write(apiKey)
+            try keychain.write(apiKey)
         }
         scrubLegacyAPIKey()
     }
@@ -203,6 +204,6 @@ struct SettingsStore {
 
     private func save(_ dict: [String: String]) {
         let data = try? JSONSerialization.data(withJSONObject: dict)
-        try? data?.write(to: settingsFile)
+        try? data?.write(to: settingsFile, options: .atomic)
     }
 }

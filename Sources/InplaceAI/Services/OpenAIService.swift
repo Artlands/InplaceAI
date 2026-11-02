@@ -35,6 +35,7 @@ struct OpenAIService {
             throw ServiceError.http(statusCode: http.statusCode, body: errorBody(from: data))
         }
 
+        try Task.checkCancellation()
         let rewritten = try decodeRewrittenText(from: data)
 
         return Suggestion(
@@ -121,19 +122,12 @@ struct OpenAIService {
         model: String,
         baseURL: String
     ) throws -> URLRequest {
-        var trimmed = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.hasSuffix("/") {
-            trimmed.append("/")
-        }
-        guard let root = URL(string: trimmed) else {
-            throw NSError(domain: "config", code: -3, userInfo: [NSLocalizedDescriptionKey: "Invalid base URL"])
-        }
-        let url = root.appendingPathComponent("chat/completions")
-        guard ["http", "https"].contains(url.scheme?.lowercased()) else {
-            throw NSError(domain: "config", code: -3, userInfo: [NSLocalizedDescriptionKey: "Invalid base URL"])
-        }
+        let url = try ProviderConfiguration.endpoint(baseURL: baseURL, path: "chat/completions")
+        let model = try ProviderConfiguration.modelName(model)
+        let apiKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.timeoutInterval = synchronousTimeout
         if !apiKey.isEmpty {
             request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
